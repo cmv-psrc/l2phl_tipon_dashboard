@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # History files
 .Rhistory
 .Rapp.history
@@ -47,3 +48,22 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+=======
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.positai
+
+/.quarto/
+**/*.quarto_ipynb
+
+# Exclude sensitive scripts
+Data Refresh/
+
+# Optional: exclude temp files
+*.Rhistory
+*.RData
+*.log
+.DS_Store
+>>>>>>> 9aff2cd (Initial commit)
