@@ -105,7 +105,9 @@ df_replacements <- df_replacements %>%
 
 df_replacements_actual <- df_replacements %>%
   filter(`Status` == "Replace") %>%
-  select(-`Status`)
+  select(-`Status`) %>%
+  filter(!`HHID` %in% c(7686, 6198, 30011, 40537, 56520, 66051, 66072, 68550, 70068, 71027, 79578, 83024, 82064, 82513, 82521, 82525, 81061, 81532, 81567, 77015, 75002, 75018, 78049, 78570, 74523, 90544, 84502, 84062, 91012, 93048, 93053, 93504, 93514, 93548, 91516, 119571, 119045, 99012, 97063, 100005, 100064, 102039, 102065, 105565, 105136, 107563, 110008, 116514, 115029
+))
 df_replacements_close <- df_replacements %>%
   filter(`Status` == "Close to Replacement") %>%
   select(-`Status`)
@@ -115,7 +117,7 @@ df_replacements_close <- df_replacements %>%
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **Incomplete HHIDs for Replacement** <i>(at least 15 calls and not complete)</i>
+## **Incomplete HHIDs for Replacement** <i>(at least 15 calls and not complete, days not incorporated, removed already approved replacement)</i>
 
 ```{r}
 
