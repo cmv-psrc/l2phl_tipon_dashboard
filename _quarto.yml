@@ -6,6 +6,8 @@ website:
   navbar:
     pinned: true
     left:
+      - href: tipon_r09.qmd
+        text: Round 09
       - href: tipon_r08.qmd
         text: Round 08
       - href: about.qmd

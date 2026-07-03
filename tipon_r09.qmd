@@ -1,0 +1,2227 @@
+---
+title: "Round 09"
+subtitle: |
+  <span style="font-size:0.85em; color:#666; font-style:italic;">
+  Last updated: `r format(Sys.time(), '%B %d, %Y %I:%M %p')`
+  </span>
+format: 
+  dashboard
+date: today
+execute:
+  echo: false
+---
+
+```{r, include = FALSE}
+library(openxlsx)
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(reactable)
+library(ggplot2)
+library(reshape2)
+library(shiny)
+
+#Load EXCEL FILE (change file_path per user)
+file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
+
+# read specific sheets
+df_clean <- read.xlsx(file_path, sheet = "CleanData")
+df_callcount <- read.xlsx(file_path, sheet = "CallCounts")
+df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
+
+```
+
+# **Summary**
+<div style="text-align: center; font-weight: bold; font-size: 30px;">
+Summary Status
+</div>
+<div style="text-align: center; font-style: italic; font-size: 16px;">
+This page shows the HHIDs whose number of calls are/close to the 15 call replacement threshold. This also shows which HHIDs whose completes are more than 1. This also shows which PSUs still have 0 output.
+</div>
+
+```{r, include = FALSE}
+df_replacements <- df_callcount %>%
+  filter(total_count > 10) %>%
+  arrange(desc(total_count))
+
+df_areas$hhid <- as.character(df_areas$hhid)
+
+df_areas <- df_areas %>%
+  mutate(bregion = case_when(
+    region == 13 ~ "NCR",
+    region %in% c(14, 1, 2, 3) ~ "NCL",
+    region %in% c(4, 17, 5) ~ "SLB",
+    region %in% c(6, 7, 8, 18) ~ "VIS",
+    region %in% c(9, 10, 11, 12, 16, 19) ~ "MIN"
+    ),
+    bregion = factor(bregion, levels = c("NCR", "NCL", "SLB", "VIS", "MIN"))
+  )
+
+df_clean_final_tag <- df_clean %>%
+  filter(final == 1)
+
+df_clean_final_tag <- df_clean_final_tag[, c("hhid", "call_status", "interview_monthday")]
+
+df_replacements <- df_replacements %>%
+  left_join(df_areas, by = "hhid") %>%
+  left_join(df_clean_final_tag, by = "hhid") %>%
+  filter(call_status != 1)
+
+df_replacements <- df_replacements[, c("hhid", "bregion", "barangay_name", "total_count", "call_status", "interview_monthday")]
+
+df_replacements <- df_replacements %>%
+  mutate(status = case_when(
+    total_count >= 15 ~ "Replace",
+    total_count < 15 ~ "Close to Replacement"
+    )
+  )
+
+df_replacements <- df_replacements %>%
+  mutate(call_status = case_when(
+    call_status == 1 ~ "Complete",
+    call_status == 2 ~ "Partial, No Callback",
+    call_status == 3 ~ "Partial, Scheduled Callback",
+    call_status == 4 ~ "Scheduled Callback",
+    call_status == 5 ~ "Refused",
+    call_status == 6 ~ "Just Ringing",
+    call_status == 7 ~ "Not Ringing",
+    call_status == 8 ~ "Not In Service",
+    call_status == 9 ~ "Don't Know Household",
+    call_status == 10 ~ "Reference Can't Connect",
+    )
+  )
+
+df_replacements <- df_replacements %>%
+  rename(
+    `HHID` = `hhid`,
+    `Broad Region` = `bregion`,
+    `Barangay` = `barangay_name`,
+    `Call Count` = `total_count`,
+    `Status` = `status`,
+    `Latest Call` = `call_status`,
+    `Latest Date` = `interview_monthday`
+    )
+
+df_replacements_actual <- df_replacements %>%
+  filter(`Status` == "Replace") %>%
+  select(-`Status`) %>%
+  filter(!`HHID` %in% c(1,2
+))
+df_replacements_close <- df_replacements %>%
+  filter(`Status` == "Close to Replacement") %>%
+  select(-`Status`)
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Incomplete HHIDs for Replacement** <i>(at least 15 calls and not complete, days not incorporated, removed already approved replacement)</i>
+
+```{r}
+
+reactable(
+  df_replacements_actual,
+  columns = list(
+    'Barangay' = colDef(
+      minWidth = 300,
+      maxWidth = 300,
+      ),
+    'Latest Call' = colDef(
+      minWidth = 300,
+      maxWidth = 300,
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+::: {.row}
+:::
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Incomplete HHIDs Close to Replacement** <i>(more than 10 calls and not yet complete)</i>
+
+```{r}
+
+reactable(
+  df_replacements_close,
+  columns = list(
+    'Barangay' = colDef(
+      minWidth = 300,
+      maxWidth = 300,
+      ),
+    'Latest Call' = colDef(
+      minWidth = 300,
+      maxWidth = 300,
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+df_dupli <- df_callcount %>%
+  filter(total_call_status_1 > 1) %>%
+  arrange(desc(total_call_status_1))
+
+df_areas$hhid <- as.character(df_areas$hhid)
+
+df_areas <- df_areas %>%
+  mutate(bregion = case_when(
+    region == 13 ~ "NCR",
+    region %in% c(14, 1, 2, 3) ~ "NCL",
+    region %in% c(4, 17, 5) ~ "SLB",
+    region %in% c(6, 7, 8, 18) ~ "VIS",
+    region %in% c(9, 10, 11, 12, 16, 19) ~ "MIN"
+    ),
+    bregion = factor(bregion, levels = c("NCR", "NCL", "SLB", "VIS", "MIN"))
+  )
+
+df_dupli <- df_dupli %>%
+  left_join(df_areas, by = "hhid")
+
+df_dupli <- df_dupli[, c("hhid", "bregion", "barangay_name", "total_call_status_1")]
+
+df_dupli <- df_dupli %>%
+  rename(
+    `HHID` = `hhid`,
+    `Broad Region` = `bregion`,
+    `Barangay` = `barangay_name`,
+    `Completes` = `total_call_status_1`
+    )
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+
+## **HHIDs with Duplicate Completes** <i>(has more than 1 completed interview)</i>
+
+```{r}
+
+reactable(
+  df_dupli,
+  columns = list(
+    'Barangay' = colDef(
+      minWidth = 300,
+      maxWidth = 300,
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+df_zero <- df_areas[, c("hhid", "region", "barangay", "barangay_name")] %>%
+  mutate(bregion = case_when(
+    region == 13 ~ "NCR",
+    region %in% c(14, 1, 2, 3) ~ "NCL",
+    region %in% c(4, 17, 5) ~ "SLB",
+    region %in% c(6, 7, 8, 18) ~ "VIS",
+    region %in% c(9, 10, 11, 12, 16, 19) ~ "MIN"
+    ),
+    bregion = factor(bregion, levels = c("NCR", "NCL", "SLB", "VIS", "MIN"))
+  )
+df_clean_zero <- df_clean[, c("hhid", "call_status", "final")] %>%
+  filter(final == 1) %>%
+  mutate(call_status = case_when(
+    call_status == 1 ~ 1,
+    call_status %in% c(2, 3, 4, 5, 6, 7, 8, 9, 10) ~ 0
+    )
+  )
+
+df_zero$hhid <- as.character(df_zero$hhid)
+
+df_zero <- df_zero %>%
+  left_join(df_clean_zero, by = "hhid")
+
+df_zero_final <- df_zero %>%
+  group_by(bregion, barangay_name) %>%
+  summarise(total_completes = sum(call_status, na.rm = TRUE),
+            total_called = n_distinct(hhid),
+            .groups = "drop") %>%
+  filter(total_completes == 0)
+
+df_zero_final <- df_zero_final %>%
+  rename(
+    `Broad Region` = `bregion`,
+    `Barangay` = `barangay_name`,
+    `Completes` = `total_completes`,
+    `Called` = `total_called`
+    )
+
+```
+
+::: {.row}
+::: {.column width="55%" .mx-auto}
+::: {.card}
+
+## **PSU with 0 Output**
+
+```{r}
+
+reactable(
+  df_zero_final,
+  columns = list(
+    'Barangay' = colDef(
+      minWidth = 300,
+      maxWidth = 300
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = nrow(df_zero_final),
+  pagination = FALSE
+)
+```
+:::
+:::
+:::
+
+# **Interviewer Status**
+<div style="text-align: center; font-weight: bold; font-size: 30px;">
+Interviewer Status Updates
+</div>
+<div style="text-align: center; font-style: italic; font-size: 16px;">
+This page shows the status of each interviewer in terms of their completes per day and their accumulated call status per day.
+</div>
+
+```{r}
+
+table_df_1 <- df_clean %>%
+  filter(call_status == 1, final == 1) %>%
+  count(`interview_monthday`, interviewer_id) %>%
+  pivot_wider(
+    names_from = interviewer_id,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_1 <- table_df_1[, c(names(table_df_1)[1], sort(names(table_df_1)[-1]))]
+
+table_df_1 <- table_df_1 %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+col_totals <- table_df_1 %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(`interview_monthday` = "Total Interviews")
+
+table_df_1 <- table_df_1 %>%
+  mutate(`interview_monthday` = as.character(`interview_monthday`))
+
+final_table_1 <- bind_rows(table_df_1, col_totals)
+
+names(final_table_1)[names(final_table_1) == "interview_monthday"] <- "Interview Date"
+
+final_table_1 <- final_table_1[, c(names(final_table_1)[1], "Total Interviews", setdiff(names(final_table_1), c(names(final_table_1)[1], "Total Interviews")))]
+
+
+```
+
+::: {.row}
+::: {.column width="55%" .mx-auto}
+::: {.card}
+## **Completed Interviews per Interviewer**
+
+```{r}
+
+# Aggregate counts by date and interviewer
+plot_df_1 <- df_clean %>%
+  filter(call_status == 1, final == 1) %>%
+  count(interview_monthday, interviewer_id)
+
+plot_df_1 <- plot_df_1[, c(names(plot_df_1)[1], sort(names(plot_df_1)[-1]))]
+
+# Stacked bar chart
+ggplot(plot_df_1, aes(x = factor(interviewer_id), y = n, fill = factor(interviewer_id))) +
+  geom_bar(stat = "identity") +
+  labs(
+    x = "Interviewer",
+    y = "Completed Interviews",
+    fill = "Interviewer"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+```
+:::
+:::
+:::
+
+::: {.row}
+:::
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Completed Interviews per Day and Interviewer**
+
+```{r}
+
+reactable(
+  final_table_1,
+  columns = list(
+    'Interview Date' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 10,
+  pagination = FALSE
+)
+```
+:::
+:::
+:::
+
+::: {.row}
+:::
+
+::: {.row}
+::: {.column width="55%" .mx-auto}
+::: {.card}
+## **Interviews per Call Status Group and Interviewer**
+
+```{r}
+
+plot_df_2 <- df_clean %>%
+  filter(final == 1) %>%
+  mutate(
+    status_group = case_when(
+      call_status == 1 ~ "Completed",
+      call_status %in% c(3, 4, 6, 7, 8) ~ "With Potential",
+      call_status %in% c(2, 5, 9, 10) ~ "Dead Call"
+    ),
+    status_group = factor(status_group, levels = c("Dead Call", "With Potential", "Completed"))
+  ) %>%
+  count(interviewer_id, status_group)
+
+plot_df_2 <- plot_df_2[, c(names(plot_df_2)[1], sort(names(plot_df_2)[-1]))]
+
+status_colors <- c(
+  "Completed" = "#66a182",
+  "With Potential" = "#d9c756",
+  "Dead Call" = "#999999"
+)
+
+ggplot(plot_df_2, aes(x = factor(interviewer_id), y = n, fill = status_group)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = status_colors) +
+  labs(
+    x = "Interviewer",
+    y = "Number of Calls",
+    fill = "Status"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_2 <- df_clean %>%
+  filter(final == 1)
+
+table_df_2 <- table_df_2 %>%
+  count(call_status, interviewer_id) %>%
+  pivot_wider(
+    names_from = interviewer_id,
+    values_from = n,
+    values_fill = 0
+  )
+table_df_2 <- table_df_2 %>%
+  mutate(
+    call_status_num = suppressWarnings(as.numeric(call_status))
+  ) %>%
+  arrange(call_status_num) %>%
+  select(-call_status_num)
+
+table_df_2 <- table_df_2[, c(names(table_df_2)[1], sort(names(table_df_2)[-1]))]
+
+# Step 2: Add row totals
+table_df_2 <- table_df_2 %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_2 %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(call_status = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_2 <- bind_rows(table_df_2, col_totals)
+
+final_table_2 <- final_table_2 %>%
+  mutate(call_status = case_when(
+    call_status == 1 ~ "Complete",
+    call_status == 2 ~ "Partial complete, no callbacks",
+    call_status == 3 ~ "Partial complete, with callback",
+    call_status == 4 ~ "Scheduled callback",
+    call_status == 5 ~ "Refused",
+    call_status == 6 ~ "Just ringing",
+    call_status == 7 ~ "Not ringing",
+    call_status == 8 ~ "Phone not in service",
+    call_status == 9 ~ "Don't know the household",
+    call_status == 10 ~ "Reference person can't connect",
+    TRUE ~ as.character(call_status)  # keep other values unchanged
+  ))
+
+names(final_table_2)[names(final_table_2) == "call_status"] <- "Call Status"
+
+final_table_2 <- final_table_2[, c(names(final_table_2)[1], "Total Interviews", setdiff(names(final_table_2), c(names(final_table_2)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Interviews per Call Status and Interviewer**
+
+```{r}
+
+reactable(
+  final_table_2,
+  columns = list(
+    'Call Status' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = nrow(final_table_2),
+  pagination = FALSE
+)
+```
+:::
+:::
+:::
+
+# **Area Status**
+<div style="text-align: center; font-weight: bold; font-size: 30px;">
+Area Status Updates
+</div>
+<div style="text-align: center; font-style: italic; font-size: 16px;">
+This page shows the status of each area in terms of their completes per day and their accumulated call status per day.
+</div>
+
+```{r, include = FALSE}
+table_df_3 <- df_clean %>%
+  filter(final == 1, call_status == 1) %>%
+  mutate(bregion = case_when(
+    region == 13 ~ "NCR",
+    region %in% c(14, 1, 2, 3) ~ "NCL",
+    region %in% c(4, 17, 5) ~ "SLB",
+    region %in% c(6, 7, 8, 18) ~ "VIS",
+    region %in% c(9, 10, 11, 12, 16, 19) ~ "MIN"
+    ),
+    bregion = factor(bregion, levels = c("NCR", "NCL", "SLB", "VIS", "MIN"))
+  ) %>%
+  count(`bregion`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_3 <- table_df_3[, c(names(table_df_3)[1], sort(names(table_df_3)[-1]))]
+
+# Step 2: Add row totals
+table_df_3 <- table_df_3 %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_3 %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(bregion = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_3 <- bind_rows(table_df_3, col_totals)
+
+names(final_table_3)[names(final_table_3) == "bregion"] <- "Broad Region"
+
+final_table_3 <- final_table_3[, c(names(final_table_3)[1], "Total Interviews", setdiff(names(final_table_3), c(names(final_table_3)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Completed Interviews per Broad Region and Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_3,
+  columns = list(
+    'Broad Region' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = nrow(final_table_3),
+  pagination = FALSE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_ncr <- df_clean %>%
+  filter(final == 1, call_status == 1, region == 13)
+
+table_df_ncr <- table_df_ncr[order(table_df_ncr$barangay), ]
+
+table_df_ncr <- table_df_ncr %>%
+  mutate(barangay = case_when(
+		`barangay` == 26154 ~ "Addition Hills, Mandaluyong",
+		`barangay` == 26156 ~ "Barangka Drive, Mandaluyong",
+		`barangay` == 26166 ~ "Highway Hills, Mandaluyong",
+		`barangay` == 26167 ~ "Hulo, Mandaluyong",
+		`barangay` == 26170 ~ "Mauway, Mandaluyong",
+		`barangay` == 26175 ~ "Plainview, Mandaluyong",
+		`barangay` == 26281 ~ "Barangay 684, Manila",
+		`barangay` == 26341 ~ "Barangay 867, Manila",
+		`barangay` == 26348 ~ "Barangay 650, Manila",
+		`barangay` == 26358 ~ "Barangay 385, Manila",
+		`barangay` == 26510 ~ "Barangay 537, Manila",
+		`barangay` == 26547 ~ "Barangay 574, Manila",
+		`barangay` == 26670 ~ "Barangay 777, Manila",
+		`barangay` == 26906 ~ "Barangay 180, Manila",
+		`barangay` == 27091 ~ "Santo Niño, Marikina",
+		`barangay` == 27094 ~ "Alabang, Muntinlupa",
+		`barangay` == 27106 ~ "Don Galo, Paranaque",
+		`barangay` == 27112 ~ "San Dionisio, Paranaque",
+		`barangay` == 27116 ~ "Sun Valley, Paranaque",
+		`barangay` == 27130 ~ "Maybunga, Pasig",
+		`barangay` == 27167 ~ "Marulas, Valenzuela",
+		`barangay` == 27168 ~ "Maysan, Valenzuela",
+		`barangay` == 27255 ~ "Barangay 165, Caloocan",
+		`barangay` == 27267 ~ "Barangay 176, Caloocan",
+		`barangay` == 27273 ~ "Barangay 181, Caloocan",
+		`barangay` == 27371 ~ "Baritan, Malabon",
+		`barangay` == 27379 ~ "Longos, Malabon",
+		`barangay` == 27390 ~ "Tugatog, Malabon",
+		`barangay` == 27398 ~ "NBBS Kaunlaran, Navotas",
+		`barangay` == 27450 ~ "Barangay 136, Pasay",
+		`barangay` == 27511 ~ "Barangay 191, Pasay",
+		`barangay` == 27610 ~ "Aguho, Pateros",
+		`barangay` == 27624 ~ "Baesa, Quezon City",
+		`barangay` == 27663 ~ "Gulod, Quezon City",
+		`barangay` == 27690 ~ "Nagkaisang Nayon, Quezon City",
+		`barangay` == 27700 ~ "Paltok, Quezon City",
+		`barangay` == 27732 ~ "Santa Monica, Quezon City",
+		`barangay` == 27734 ~ "Santo Cristo, Quezon City",
+		`barangay` == 27736 ~ "Santo Nino, Quezon City",
+		`barangay` == 27747 ~ "Tandang Sora, Quezon City",
+		`barangay` == 26124 ~ "Cembo, Taguig",
+		`barangay` == 26139 ~ "Pitogo, Taguig",
+		`barangay` == 27800 ~ "Pinagsama, Taguig",
+		`barangay` == 27807 ~ "Upper Bicutan, Taguig",
+		`barangay` == 27810 ~ "Western Bicutan, Taguig"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Addition Hills, Mandaluyong", "Barangka Drive, Mandaluyong", "Highway Hills, Mandaluyong", "Hulo, Mandaluyong", "Mauway, Mandaluyong", "Plainview, Mandaluyong", "Barangay 684, Manila", "Barangay 867, Manila", "Barangay 650, Manila", "Barangay 385, Manila", "Barangay 537, Manila", "Barangay 574, Manila", "Barangay 777, Manila", "Barangay 180, Manila", "Santo Niño, Marikina", "Alabang, Muntinlupa", "Don Galo, Paranaque", "San Dionisio, Paranaque", "Sun Valley, Paranaque", "Maybunga, Pasig", "Marulas, Valenzuela", "Maysan, Valenzuela", "Barangay 165, Caloocan", "Barangay 176, Caloocan", "Barangay 181, Caloocan", "Baritan, Malabon", "Longos, Malabon", "Tugatog, Malabon", "NBBS Kaunlaran, Navotas", "Barangay 136, Pasay", "Barangay 191, Pasay", "Aguho, Pateros", "Baesa, Quezon City", "Gulod, Quezon City", "Nagkaisang Nayon, Quezon City", "Paltok, Quezon City", "Santa Monica, Quezon City", "Santo Cristo, Quezon City", "Santo Nino, Quezon City", "Tandang Sora, Quezon City", "Cembo, Taguig", "Pitogo, Taguig", "Pinagsama, Taguig", "Upper Bicutan, Taguig", "Western Bicutan, Taguig"
+))
+  ) %>%
+  count(`barangay`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_ncr <- table_df_ncr[, c(names(table_df_ncr)[1], sort(names(table_df_ncr)[-1]))]
+
+# Step 2: Add row totals
+table_df_ncr <- table_df_ncr %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_ncr %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_ncr <- bind_rows(table_df_ncr, col_totals)
+
+names(final_table_ncr)[names(final_table_ncr) == "barangay"] <- "NCR Barangay"
+
+final_table_ncr <- final_table_ncr[, c(names(final_table_ncr)[1], "Total Interviews", setdiff(names(final_table_ncr), c(names(final_table_ncr)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **NCR Completed Interviews per Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_ncr,
+  columns = list(
+    'NCR Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_ncl <- df_clean %>%
+  filter(final == 1, call_status == 1, region %in% c(14, 1, 2, 3))
+
+table_df_ncl <- table_df_ncl[order(table_df_ncl$barangay), ]
+
+table_df_ncl <- table_df_ncl %>%
+  mutate(barangay = case_when(
+		`barangay` == 4366 ~ "Bakakeng Central, Baguio, Benguet",
+		`barangay` == 4400 ~ "Gibraltar, Baguio, Benguet",
+		`barangay` == 4502 ~ "Amlimay, Buguias, Benguet",
+		`barangay` == 14516 ~ "Butac, Aguinaldo, Ifugao",
+		`barangay` == 14539 ~ "Namillangan, Alfonso Lista, Ifugao",
+		`barangay` == 14546 ~ "San Marcos, Alfonso Lista, Ifugao",
+		`barangay` == 19054 ~ "Bulanao, Tabuk, Kalinga",
+		`barangay` == 19065 ~ "Dilag, Tabuk, Kalinga",
+		`barangay` == 14762 ~ "Saud, Badoc, Ilocos Norte",
+		`barangay` == 15315 ~ "Lubing, Burgos, Ilocos Sur",
+		`barangay` == 15493 ~ "Napo, Magsingal, Ilocos Sur",
+		`barangay` == 32309 ~ "Ninoy, Aguilar, Pangasinan",
+		`barangay` == 32354 ~ "Toritori, Anda, Pangasinan",
+		`barangay` == 32913 ~ "Bolaoit, Malasiqui, Pangasinan",
+		`barangay` == 32989 ~ "Pugaro, Manaoag, Pangasinan",
+		`barangay` == 33407 ~ "Lagasit, San Quintin, Pangasinan",
+		`barangay` == 33603 ~ "Sinabaan, Umingan, Pangasinan",
+		`barangay` == 33644 ~ "Zone III, Villasis, Pangasinan",
+		`barangay` == 7695 ~ "Linao East, Tuguegarao, Cagayan",
+		`barangay` == 18221 ~ "Plaridel, Santiago, Isabela",
+		`barangay` == 18492 ~ "Dicamay I, Jones, Isabela",
+		`barangay` == 18624 ~ "Santos, Quezon, Isabela",
+		`barangay` == 18758 ~ "Villa Rose, San Guillermo, Isabela",
+		`barangay` == 30458 ~ "Napo, Ambaguio, Nueva Vizcaya",
+		`barangay` == 30670 ~ "Dagupan, Quezon, Nueva Vizcaya",
+		`barangay` == 34988 ~ "Santo Nino, Maddela, Quirino",
+		`barangay` == 2749 ~ "Decoliat, Maria Aurora, Aurora",
+		`barangay` == 3055 ~ "Colo, Dinalupihan, Bataan",
+		`barangay` == 3103 ~ "Culis, Hermosa, Bataan",
+		`barangay` == 3135 ~ "Batangas II, Mariveles, Bataan",
+		`barangay` == 6367 ~ "Tarcan, Baliuag, Bulacan",
+		`barangay` == 6518 ~ "Longos, Malolos, Bulacan",
+		`barangay` == 6620 ~ "Cacarong Matanda, Pandi, Bulacan",
+		`barangay` == 6663 ~ "San Jose, Plaridel, Bulacan",
+		`barangay` == 6736 ~ "Francisco Homes-Mulawin, SJDM, Bulacan",
+		`barangay` == 6776 ~ "Santo Cristo, SJDM, Bulacan",
+		`barangay` == 6817 ~ "Salangan, San Miguel, Bulacan",
+		`barangay` == 6868 ~ "Bulac, Santa Maria, Bulacan",
+		`barangay` == 29650 ~ "Tugatug, Bongabon, Nueva Ecija",
+		`barangay` == 29699 ~ "Macatbong, Cabanatuan, Nueva Ecija",
+		`barangay` == 29755 ~ "San Fernando Sur, Cabiao, Nueva Ecija",
+		`barangay` == 31751 ~ "Cuayan, Angeles, Pampanga",
+		`barangay` == 31775 ~ "Sapangbato, Angeles, Pampanga",
+		`barangay` == 31787 ~ "Sucad, Apalit, Pampanga",
+		`barangay` == 31857 ~ "Paligui, Candaba, Pampanga",
+		`barangay` == 32010 ~ "Caduang Tete, Macabebe, Pampanga",
+		`barangay` == 32257 ~ "San Basilio, Santa Rita, Pampanga",
+		`barangay` == 39241 ~ "Anupul, Bamban, Tarlac",
+		`barangay` == 39418 ~ "Santa Lucia, Gerona, Tarlac",
+		`barangay` == 39519 ~ "Cayanga, Paniqui, Tarlac",
+		`barangay` == 39985 ~ "San Juan, Cabangan, Zambales"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Bakakeng Central, Baguio, Benguet", "Gibraltar, Baguio, Benguet", "Amlimay, Buguias, Benguet", "Butac, Aguinaldo, Ifugao", "Namillangan, Alfonso Lista, Ifugao", "San Marcos, Alfonso Lista, Ifugao", "Bulanao, Tabuk, Kalinga", "Dilag, Tabuk, Kalinga", "Saud, Badoc, Ilocos Norte", "Lubing, Burgos, Ilocos Sur", "Napo, Magsingal, Ilocos Sur", "Ninoy, Aguilar, Pangasinan", "Toritori, Anda, Pangasinan", "Bolaoit, Malasiqui, Pangasinan", "Pugaro, Manaoag, Pangasinan", "Lagasit, San Quintin, Pangasinan", "Sinabaan, Umingan, Pangasinan", "Zone III, Villasis, Pangasinan", "Linao East, Tuguegarao, Cagayan", "Plaridel, Santiago, Isabela", "Dicamay I, Jones, Isabela", "Santos, Quezon, Isabela", "Villa Rose, San Guillermo, Isabela", "Napo, Ambaguio, Nueva Vizcaya", "Dagupan, Quezon, Nueva Vizcaya", "Santo Nino, Maddela, Quirino", "Decoliat, Maria Aurora, Aurora", "Colo, Dinalupihan, Bataan", "Culis, Hermosa, Bataan", "Batangas II, Mariveles, Bataan", "Tarcan, Baliuag, Bulacan", "Longos, Malolos, Bulacan", "Cacarong Matanda, Pandi, Bulacan", "San Jose, Plaridel, Bulacan", "Francisco Homes-Mulawin, SJDM, Bulacan", "Santo Cristo, SJDM, Bulacan", "Salangan, San Miguel, Bulacan", "Bulac, Santa Maria, Bulacan", "Tugatug, Bongabon, Nueva Ecija", "Macatbong, Cabanatuan, Nueva Ecija", "San Fernando Sur, Cabiao, Nueva Ecija", "Cuayan, Angeles, Pampanga", "Sapangbato, Angeles, Pampanga", "Sucad, Apalit, Pampanga", "Paligui, Candaba, Pampanga", "Caduang Tete, Macabebe, Pampanga", "San Basilio, Santa Rita, Pampanga", "Anupul, Bamban, Tarlac", "Santa Lucia, Gerona, Tarlac", "Cayanga, Paniqui, Tarlac", "San Juan, Cabangan, Zambales"
+))
+  ) %>%
+  count(`barangay`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_ncl <- table_df_ncl[, c(names(table_df_ncl)[1], sort(names(table_df_ncl)[-1]))]
+
+# Step 2: Add row totals
+table_df_ncl <- table_df_ncl %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_ncl %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_ncl <- bind_rows(table_df_ncl, col_totals)
+
+names(final_table_ncl)[names(final_table_ncl) == "barangay"] <- "NCL Barangay"
+
+final_table_ncl <- final_table_ncl[, c(names(final_table_ncl)[1], "Total Interviews", setdiff(names(final_table_ncl), c(names(final_table_ncl)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **NCL Completed Interviews per Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_ncl,
+  columns = list(
+    'NCL Barangay' = colDef(
+      sticky = "left",
+      minWidth = 400,
+      maxWidth = 400,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_slb <- df_clean %>%
+  filter(final == 1, call_status == 1, region %in% c(4, 17, 5))
+
+table_df_slb <- table_df_slb[order(table_df_slb$barangay), ]
+
+table_df_slb <- table_df_slb %>%
+  mutate(barangay = case_when(
+		`barangay` == 3408 ~ "Cuta, Batangas, Batangas",
+		`barangay` == 4045 ~ "Tugtug, San Jose, Batangas",
+		`barangay` == 4064 ~ "Libato, San Juan, Batangas",
+		`barangay` == 4179 ~ "Balisong, Taal, Batangas",
+		`barangay` == 9970 ~ "Habay I, Bacoor, Cavite",
+		`barangay` == 10010 ~ "Salinas I, Bacoor, Cavite",
+		`barangay` == 10040 ~ "Cabilang Baybay, Carmona, Cavite",
+		`barangay` == 10138 ~ "Fatima III, Dasmarinas, Cavite",
+		`barangay` == 10141 ~ "Langkaan II, Dasmarinas, Cavite",
+		`barangay` == 10148 ~ "Saint Peter I, Dasmarines, Cavite",
+		`barangay` == 10162 ~ "San Agustin III, Dasmarinas, Cavite",
+		`barangay` == 10293 ~ "Anabu II-D, Imus, Cavite",
+		`barangay` == 10594 ~ "Ipil II, Silang, Cavite",
+		`barangay` == 10672 ~ "Bagtas, Tanza, Cavite",
+		`barangay` == 10716 ~ "Aguado, Martires, Cavite",
+		`barangay` == 10724 ~ "Lapidario, Martires, Cavite",
+		`barangay` == 19769 ~ "La Mesa, Calamba, Laguna",
+		`barangay` == 19853 ~ "San Jose, Binan, Laguna",
+		`barangay` == 19984 ~ "San Miguel, Mabitac, Laguna",
+		`barangay` == 20083 ~ "Poblacion I, Nagcarlan, Laguna",
+		`barangay` == 20134 ~ "Kabulusan, Pakil, Laguna",
+		`barangay` == 20163 ~ "Santa Clara Sur, Pila, Laguna",
+		`barangay` == 20270 ~ "Pacita 1, San Pedro, Laguna",
+		`barangay` == 33739 ~ "Maligaya, Buenavista, Quezon",
+		`barangay` == 34344 ~ "Cotta, Lucena, Quezon",
+		`barangay` == 34539 ~ "Pinagtubigan Weste, Perez, Quezon",
+		`barangay` == 35071 ~ "Pila Pila, Binangonan, Rizal",
+		`barangay` == 35079 ~ "Tatala, Binangonan, Rizal",
+		`barangay` == 35081 ~ "San Andres, Cainta, Rizal",
+		`barangay` == 35109 ~ "Cupang, Antipolo, Rizal",
+		`barangay` == 35117 ~ "San Jose, Antipolo, Rizal",
+		`barangay` == 35121 ~ "Santa Cruz, Antipolo, Rizal",
+		`barangay` == 30777 ~ "Balansay, Mamburao, Occidental Mindoro",
+		`barangay` == 30942 ~ "Labonan, Bongabong, Oriental Mindoro",
+		`barangay` == 31003 ~ "Lumang Bayan, Calapan, Oriental Mindoro",
+		`barangay` == 31213 ~ "Aninuan, Puerto Galera, Oriental Mindoro",
+		`barangay` == 31386 ~ "Rio Tuba, Bataraza, Palawan",
+		`barangay` == 31574 ~ "Bacungan, Puerto Princesa, Palawan",
+		`barangay` == 31638 ~ "Tiniguiban, Puerto Princesa, Palawan",
+		`barangay` == 35295 ~ "Limon Sur, Looc, Romblon",
+		`barangay` == 35367 ~ "Binongahan, San Agustin, Romblon",
+		`barangay` == 35420 ~ "Poblacion, Santa Fe, Romblon",
+		`barangay` == 1515 ~ "Bgy. 41 - Bogtong, Legazpi, Albay",
+		`barangay` == 1710 ~ "Tobgon, Oas, Albay",
+		`barangay` == 7821 ~ "Bautista, Labo, Camarines Norte",
+		`barangay` == 8359 ~ "Balaynan, Goa, Camarines Sur",
+		`barangay` == 8740 ~ "San Gabriel, Pamplona, Camarines Sur",
+		`barangay` == 8881 ~ "Maragni, San Fernando, Camarines Sur",
+		`barangay` == 8968 ~ "Butawanan, Siruma, Camarines Sur",
+		`barangay` == 8996 ~ "Huyonhuyon, Tigaon, Camarines Sur",
+		`barangay` == 9847 ~ "Calatagan Proper, Virac, Catanduanes",
+		`barangay` == 24797 ~ "Nipa, Palanas, Masbates",
+		`barangay` == 36801 ~ "Dangcalan, Castilla, Sorsogon"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Cuta, Batangas, Batangas", "Tugtug, San Jose, Batangas", "Libato, San Juan, Batangas", "Balisong, Taal, Batangas", "Habay I, Bacoor, Cavite", "Salinas I, Bacoor, Cavite", "Cabilang Baybay, Carmona, Cavite", "Fatima III, Dasmarinas, Cavite", "Langkaan II, Dasmarinas, Cavite", "Saint Peter I, Dasmarines, Cavite", "San Agustin III, Dasmarinas, Cavite", "Anabu II-D, Imus, Cavite", "Ipil II, Silang, Cavite", "Bagtas, Tanza, Cavite", "Aguado, Martires, Cavite", "Lapidario, Martires, Cavite", "La Mesa, Calamba, Laguna", "San Jose, Binan, Laguna", "San Miguel, Mabitac, Laguna", "Poblacion I, Nagcarlan, Laguna", "Kabulusan, Pakil, Laguna", "Santa Clara Sur, Pila, Laguna", "Pacita 1, San Pedro, Laguna", "Maligaya, Buenavista, Quezon", "Cotta, Lucena, Quezon", "Pinagtubigan Weste, Perez, Quezon", "Pila Pila, Binangonan, Rizal", "Tatala, Binangonan, Rizal", "San Andres, Cainta, Rizal", "Cupang, Antipolo, Rizal", "San Jose, Antipolo, Rizal", "Santa Cruz, Antipolo, Rizal", "Balansay, Mamburao, Occidental Mindoro", "Labonan, Bongabong, Oriental Mindoro", "Lumang Bayan, Calapan, Oriental Mindoro", "Aninuan, Puerto Galera, Oriental Mindoro", "Rio Tuba, Bataraza, Palawan", "Bacungan, Puerto Princesa, Palawan", "Tiniguiban, Puerto Princesa, Palawan", "Limon Sur, Looc, Romblon", "Binongahan, San Agustin, Romblon", "Poblacion, Santa Fe, Romblon", "Bgy. 41 - Bogtong, Legazpi, Albay", "Tobgon, Oas, Albay", "Bautista, Labo, Camarines Norte", "Balaynan, Goa, Camarines Sur", "San Gabriel, Pamplona, Camarines Sur", "Maragni, San Fernando, Camarines Sur", "Butawanan, Siruma, Camarines Sur", "Huyonhuyon, Tigaon, Camarines Sur", "Calatagan Proper, Virac, Catanduanes", "Nipa, Palanas, Masbates", "Dangcalan, Castilla, Sorsogon"
+))
+  ) %>%
+  count(`barangay`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_slb <- table_df_slb[, c(names(table_df_slb)[1], sort(names(table_df_slb)[-1]))]
+
+# Step 2: Add row totals
+table_df_slb <- table_df_slb %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_slb %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_slb <- bind_rows(table_df_slb, col_totals)
+
+names(final_table_slb)[names(final_table_slb) == "barangay"] <- "SLB Barangay"
+
+final_table_slb <- final_table_slb[, c(names(final_table_slb)[1], "Total Interviews", setdiff(names(final_table_slb), c(names(final_table_slb)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **SLB Completed Interviews per Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_slb,
+  columns = list(
+    'SLB Barangay' = colDef(
+      sticky = "left",
+      minWidth = 400,
+      maxWidth = 400,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_vis <- df_clean %>%
+  filter(final == 1, call_status == 1, region %in% c(6, 7, 8, 18))
+
+table_df_vis <- table_df_vis[order(table_df_vis$barangay), ]
+
+table_df_vis <- table_df_vis %>%
+  mutate(barangay = case_when(
+		`barangay` == 1158 ~ "Mabilo, New Washington, Aklan",
+		`barangay` == 2094 ~ "Caromangay, Hamtic, Antique",
+		`barangay` == 9173 ~ "Agbatuan, Dumarao, Capiz",
+		`barangay` == 14464 ~ "Santa Teresa, Jordan, Guimaras",
+		`barangay` == 16450 ~ "Agtabo, Passi, Iloilo",
+		`barangay` == 16641 ~ "Sapao, Dumangas, Iloilo",
+		`barangay` == 16766 ~ "Bito-on, Iloilo, Iloilo",
+		`barangay` == 17060 ~ "Tampucao, Lambunao, Iloilo",
+		`barangay` == 17179 ~ "Omambong, Leon, Iloilo",
+		`barangay` == 17683 ~ "Bagacay, San Rafael, Iloilo",
+		`barangay` == 27884 ~ "Jorge L. Araneta, Bago, Negros Occidental",
+		`barangay` == 27994 ~ "Linaon, Cauayan, Negros Occidental",
+		`barangay` == 28077 ~ "Tampalon, Kabankalan, Negros Occidental",
+		`barangay` == 28206 ~ "Tabu, Ilog, Negros Occidental",
+		`barangay` == 28331 ~ "Recreo, Pontevedra, Negros Occidental",
+		`barangay` == 28442 ~ "Mambaroto, Sipalay, Negros Occidental",
+		`barangay` == 28543 ~ "La Paz, Bais, Negros Oriental",
+		`barangay` == 28635 ~ "Balogo, Guihulngan, Negros Oriental",
+		`barangay` == 4768 ~ "Poblacion, Alicia, Bohol",
+		`barangay` == 5451 ~ "Catagbacan Handig, Loon, Bohol",
+		`barangay` == 10763 ~ "Poblacion, Aloguinsan, Cebu",
+		`barangay` == 11048 ~ "Buhisan, Cebu, Cebu",
+		`barangay` == 11049 ~ "Bulacao, Cebu, Cebu",
+		`barangay` == 11068 ~ "Kalunasan, Cebu, Cebu",
+		`barangay` == 11114 ~ "Tisa, Cebu, Cebu",
+		`barangay` == 11214 ~ "Nangka, Consolacion, Cebu",
+		`barangay` == 11382 ~ "Palanas, Ginatilan, Cebu",
+		`barangay` == 11400 ~ "Mactan, Lapu-Lapu, Cebu",
+		`barangay` == 11471 ~ "Jagobiao, Mandaue, Cebu",
+		`barangay` == 11640 ~ "Poblacion, Samboan, Cebu",
+		`barangay` == 11725 ~ "Poblacion, Santander, Cebu",
+		`barangay` == 11854 ~ "Media Once, Toledo, Cebu",
+		`barangay` == 11869 ~ "Antipolo, Tuburan, Cebu",
+		`barangay` == 13866 ~ "Poblacion V, Balangkayan, Eastern Samar",
+		`barangay` == 14348 ~ "Campidhan, San Julian, Eastern Samar",
+		`barangay` == 14404 ~ "Nato, Taft, Eastern Samar",
+		`barangay` == 22136 ~ "Langit, Alangalang, Leyte",
+		`barangay` == 22245 ~ "Bago, Bato, Leyte",
+		`barangay` == 22333 ~ "Sambel, Burauen, Leyte",
+		`barangay` == 23449 ~ "Barangay 110, Tacloban, Leyte",
+		`barangay` == 29092 ~ "Baybay, Catarman, Northern Samar",
+		`barangay` == 37537 ~ "Mayuga, Libagon, Southern Leyte",
+		`barangay` == 37761 ~ "Lipanto, Saint Bernard, Southern Leyte"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Mabilo, New Washington, Aklan", "Caromangay, Hamtic, Antique", "Agbatuan, Dumarao, Capiz", "Santa Teresa, Jordan, Guimaras", "Agtabo, Passi, Iloilo", "Sapao, Dumangas, Iloilo", "Bito-on, Iloilo, Iloilo", "Tampucao, Lambunao, Iloilo", "Omambong, Leon, Iloilo", "Bagacay, San Rafael, Iloilo", "Jorge L. Araneta, Bago, Negros Occidental", "Linaon, Cauayan, Negros Occidental", "Tampalon, Kabankalan, Negros Occidental", "Tabu, Ilog, Negros Occidental", "Recreo, Pontevedra, Negros Occidental", "Mambaroto, Sipalay, Negros Occidental", "La Paz, Bais, Negros Oriental", "Balogo, Guihulngan, Negros Oriental", "Poblacion, Alicia, Bohol", "Catagbacan Handig, Loon, Bohol", "Poblacion, Aloguinsan, Cebu", "Buhisan, Cebu, Cebu", "Bulacao, Cebu, Cebu", "Kalunasan, Cebu, Cebu", "Tisa, Cebu, Cebu", "Nangka, Consolacion, Cebu", "Palanas, Ginatilan, Cebu", "Mactan, Lapu-Lapu, Cebu", "Jagobiao, Mandaue, Cebu", "Poblacion, Samboan, Cebu", "Poblacion, Santander, Cebu", "Media Once, Toledo, Cebu", "Antipolo, Tuburan, Cebu", "Poblacion V, Balangkayan, Eastern Samar", "Campidhan, San Julian, Eastern Samar", "Nato, Taft, Eastern Samar", "Langit, Alangalang, Leyte", "Bago, Bato, Leyte", "Sambel, Burauen, Leyte", "Barangay 110, Tacloban, Leyte", "Baybay, Catarman, Northern Samar", "Mayuga, Libagon, Southern Leyte", "Lipanto, Saint Bernard, Southern Leyte"
+))
+  ) %>%
+  count(`barangay`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_vis <- table_df_vis[, c(names(table_df_vis)[1], sort(names(table_df_vis)[-1]))]
+
+# Step 2: Add row totals
+table_df_vis <- table_df_vis %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_vis %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_vis <- bind_rows(table_df_vis, col_totals)
+
+names(final_table_vis)[names(final_table_vis) == "barangay"] <- "Visayas Barangay"
+
+final_table_vis <- final_table_vis[, c(names(final_table_vis)[1], "Total Interviews", setdiff(names(final_table_vis), c(names(final_table_vis)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Visayas Completed Interviews per Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_vis,
+  columns = list(
+    'Visayas Barangay' = colDef(
+      sticky = "left",
+      minWidth = 400,
+      maxWidth = 400,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_df_min <- df_clean %>%
+  filter(final == 1, call_status == 1, region %in% c(9, 10, 11, 12, 16, 19))
+
+table_df_min <- table_df_min[order(table_df_min$barangay), ]
+
+table_df_min <- table_df_min %>%
+  mutate(barangay = case_when(
+		`barangay` == 40254 ~ "Potungan, Dapitan, Zamboanga Del Norte",
+		`barangay` == 40281 ~ "Olingan, Dipolog, Zamboanga Del Norte",
+		`barangay` == 40568 ~ "Dohinob, Pres Manuel A. Roxas, Zamboanga Del Norte",
+		`barangay` == 40715 ~ "Lunday, Sibuco, Zamboanga Del Norte",
+		`barangay` == 40951 ~ "Binuay, Dimataling, Zamboanga Del Sur",
+		`barangay` == 41577 ~ "Capisan, Zamboanga, Zamboanga Del Sur",
+		`barangay` == 41587 ~ "Kasanyangan, Zamboanga, Zamboanga Del Sur",
+		`barangay` == 42024 ~ "Libertad, Tungawan, Zamboanga Sibugay",
+		`barangay` == 5892 ~ "Barangay 11, Malaybalay, Bukidnon",
+		`barangay` == 6169 ~ "Damilag, Manolo Fortich, Bukidnon",
+		`barangay` == 6215 ~ "Langcataon, Pangantucan, Bukidnon",
+		`barangay` == 20446 ~ "Buru-un, Iligan, Lanao Del Norte",
+		`barangay` == 25394 ~ "Mantic, Tangub, Misamis Occidental",
+		`barangay` == 25481 ~ "Cogon, Balingasag, Misamis Oriental",
+		`barangay` == 25568 ~ "Carmen, Cagayan De Oro, Misamis Oriental",
+		`barangay` == 25704 ~ "San Juan, Gingoog, Misamis Oriental",
+		`barangay` == 25731 ~ "Kamelon, Initao, Misamis Oriental",
+		`barangay` == 25919 ~ "Casinglot, Tagoloan, Misamis Oriental",
+		`barangay` == 12579 ~ "Banbanon, Laak, Davao De Oro",
+		`barangay` == 12669 ~ "Magcagong, Maragusan, Davao De Oro",
+		`barangay` == 12715 ~ "Union, Monkayo, Davao De Oro",
+		`barangay` == 12825 ~ "La Paz, Carmen, Davao Del Norte",
+		`barangay` == 12886 ~ "Madaum, Tagum, Davao Del Norte",
+		`barangay` == 12893 ~ "Mankilam, Tagum, Davao Del Norte",
+		`barangay` == 13082 ~ "Barangay 31-D, Davao, Davao Del Sur",
+		`barangay` == 13109 ~ "Cabantian, Davao, Davao Del Sur",
+		`barangay` == 13149 ~ "Lizada, Davao, Davao Del Sur",
+		`barangay` == 13609 ~ "Badas, Mati, Davao Oriental",
+		`barangay` == 12055 ~ "Busaon, Banisilan, Cotabato",
+		`barangay` == 36431 ~ "Lebe, Kiamba, Sarangani",
+		`barangay` == 37217 ~ "Apopong, Gen. Santos, South Cotabato",
+		`barangay` == 37236 ~ "San Isidro, Gen. Santos, South Cotabato",
+		`barangay` %in% c(37318, 37318) ~ "Poblacion, Polomolok, South Cotabato",
+		`barangay` == 37268 ~ "Zone IV, Koronadal, South Cotabato",
+		`barangay` == 37288 ~ "Upper Maculan, Lake Sebu, South Cotabato",
+		`barangay` == 37304 ~ "Cannery Site, Polomolok, South Cotabato",
+		`barangay` == 37367 ~ "Bukay Pait, Tantangan, South Cotabato",
+		`barangay` == 692 ~ "La Caridad, Prosperidad, Agusan Del Sur",
+		`barangay` == 738 ~ "Bayugan 2, San Francisco, Agusan Del Sur",
+		`barangay` == 807 ~ "New Tubigon, Sibagat, Agusan Del Sur",
+		`barangay` == 13749 ~ "Laguna, Cagdianao, Dinagat Islands",
+		`barangay` == 13772 ~ "Albor, Libjo, Dinagat Islands",
+		`barangay` == 38877 ~ "San Juan, Surigao, Surigao Del Norte",
+		`barangay` == 39036 ~ "Telaje, Tandag, Surigao Del Sur",
+		`barangay` == 39149 ~ "Kauswagan, San Agustin, Surigao Del Sur",
+		`barangay` == 21197 ~ "Pagalongan Masioon, Ditsaan-Ramain, Lanao Del Sur",
+		`barangay` == 21426 ~ "Balagunun, Maguing, Lanao Del Sur",
+		`barangay` == 21951 ~ "Gapao Balindong, Taraka, Lanao Del Sur",
+		`barangay` == 23804 ~ "Tamontaka, Datu Odin Sinsuat, Maguindanao",
+		`barangay` == 23805 ~ "Tanuel, Datu Odin Sinsuat, Maguindanao",
+		`barangay` == 24003 ~ "Lepak, Pandag, Maguindanao",
+		`barangay` == 24074 ~ "Bongo, South Upi, Maguindanao",
+		`barangay` == 38418 ~ "Anuling, Patikul, Sulu",
+		`barangay` == 38425 ~ "Gandasuli, Patikul, Sulu",
+		`barangay` == 39878 ~ "Panglima Alari, Sitangkai, Tawi-Tawi"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Potungan, Dapitan, Zamboanga Del Norte", "Olingan, Dipolog, Zamboanga Del Norte", "Dohinob, Pres Manuel A. Roxas, Zamboanga Del Norte", "Lunday, Sibuco, Zamboanga Del Norte", "Binuay, Dimataling, Zamboanga Del Sur", "Capisan, Zamboanga, Zamboanga Del Sur", "Kasanyangan, Zamboanga, Zamboanga Del Sur", "Libertad, Tungawan, Zamboanga Sibugay", "Barangay 11, Malaybalay, Bukidnon", "Damilag, Manolo Fortich, Bukidnon", "Langcataon, Pangantucan, Bukidnon", "Buru-un, Iligan, Lanao Del Norte", "Mantic, Tangub, Misamis Occidental", "Cogon, Balingasag, Misamis Oriental", "Carmen, Cagayan De Oro, Misamis Oriental", "San Juan, Gingoog, Misamis Oriental", "Kamelon, Initao, Misamis Oriental", "Casinglot, Tagoloan, Misamis Oriental", "Banbanon, Laak, Davao De Oro", "Magcagong, Maragusan, Davao De Oro", "Union, Monkayo, Davao De Oro", "La Paz, Carmen, Davao Del Norte", "Madaum, Tagum, Davao Del Norte", "Mankilam, Tagum, Davao Del Norte", "Barangay 31-D, Davao, Davao Del Sur", "Cabantian, Davao, Davao Del Sur", "Lizada, Davao, Davao Del Sur", "Badas, Mati, Davao Oriental", "Busaon, Banisilan, Cotabato", "Lebe, Kiamba, Sarangani", "Apopong, Gen. Santos, South Cotabato", "San Isidro, Gen. Santos, South Cotabato", "Poblacion, Polomolok, South Cotabato", "Zone IV, Koronadal, South Cotabato", "Upper Maculan, Lake Sebu, South Cotabato", "Cannery Site, Polomolok, South Cotabato", "Bukay Pait, Tantangan, South Cotabato", "La Caridad, Prosperidad, Agusan Del Sur", "Bayugan 2, San Francisco, Agusan Del Sur", "New Tubigon, Sibagat, Agusan Del Sur", "Laguna, Cagdianao, Dinagat Islands", "Albor, Libjo, Dinagat Islands", "San Juan, Surigao, Surigao Del Norte", "Telaje, Tandag, Surigao Del Sur", "Kauswagan, San Agustin, Surigao Del Sur", "Pagalongan Masioon, Ditsaan-Ramain, Lanao Del Sur", "Balagunun, Maguing, Lanao Del Sur", "Gapao Balindong, Taraka, Lanao Del Sur", "Tamontaka, Datu Odin Sinsuat, Maguindanao", "Tanuel, Datu Odin Sinsuat, Maguindanao", "Lepak, Pandag, Maguindanao", "Bongo, South Upi, Maguindanao", "Anuling, Patikul, Sulu", "Gandasuli, Patikul, Sulu", "Panglima Alari, Sitangkai, Tawi-Tawi"
+))
+  ) %>%
+  count(`barangay`, `interview_day`) %>%
+  pivot_wider(
+    names_from = `interview_day`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_min <- table_df_min[, c(names(table_df_min)[1], sort(names(table_df_min)[-1]))]
+
+# Step 2: Add row totals
+table_df_min <- table_df_min %>%
+  mutate(`Total Interviews` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_min %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Interviews")
+
+# Step 4: Bind totals row
+final_table_min <- bind_rows(table_df_min, col_totals)
+
+names(final_table_min)[names(final_table_min) == "barangay"] <- "Mindanao Barangay"
+
+final_table_min <- final_table_min[, c(names(final_table_min)[1], "Total Interviews", setdiff(names(final_table_min), c(names(final_table_min)[1], "Total Interviews")))]
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Mindanao Completed Interviews per Day** <i>(July)</i>
+
+```{r}
+
+reactable(
+  final_table_min,
+  columns = list(
+    'Mindanao Barangay' = colDef(
+      sticky = "left",
+      minWidth = 400,
+      maxWidth = 400,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Interviews' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+# **Call Status**
+<div style="text-align: center; font-weight: bold; font-size: 30px;">
+Call Status Updates
+</div>
+<div style="text-align: center; font-style: italic; font-size: 16px;">
+This page shows the call status of each area (broad region and per barangay).
+</div>
+
+```{r}
+tags$div(
+  style = "text-align: center;",
+
+  # Title line
+  tags$div(
+    style = "font-weight: bold; font-size: 20px; margin-bottom: 15px;",
+    "Call Status Legend:"
+  ),
+
+  # Legend container
+  tags$div(
+    style = "display: inline-block; text-align: center; font-size: 16px;",
+
+    # First row (5 items)
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>CMP</strong> - Complete")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>PNC</strong> - Partial, No Callback")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>PSC</strong> - Partial, Scheduled Callback")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>SCB</strong> - Scheduled Callback")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>RFS</strong> - Refused")),
+
+    tags$br(),  # line break after 5 items
+
+    # Second row (5 items)
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>JRG</strong> - Just Ringing")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>NRG</strong> - Not Ringing")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>NIS</strong> - Not In Service")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>DKH</strong> - Don't Know Household")),
+    tags$span(style="display: inline-block; margin: 0 20px;", HTML("<strong>RCC</strong> - Reference Can't Connect"))
+  )
+)
+```
+
+```{r, include = FALSE}
+table_df_4 <- df_clean %>%
+  filter(final == 1) %>%
+  mutate(bregion = case_when(
+    region == 13 ~ "NCR",
+    region %in% c(14, 1, 2, 3) ~ "NCL",
+    region %in% c(4, 17, 5) ~ "SLB",
+    region %in% c(6, 7, 8, 18) ~ "VIS",
+    region %in% c(9, 10, 11, 12, 16, 19) ~ "MIN"
+    ),
+    bregion = factor(bregion, levels = c("NCR", "NCL", "SLB", "VIS", "MIN"))
+  ) %>%
+  count(`bregion`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_df_4 <- table_df_4[, c(names(table_df_4)[1], as.character(sort(as.numeric(names(table_df_4)[-1]))))]
+
+# Step 2: Add row totals
+table_df_4 <- table_df_4 %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_df_4 %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(bregion = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_4 <- bind_rows(table_df_4, col_totals)
+
+names(final_table_4)[names(final_table_4) == "bregion"] <- "Broad Region"
+
+final_table_4 <- final_table_4[, c(names(final_table_4)[1], "Total Calls", setdiff(names(final_table_4), c(names(final_table_4)[1], "Total Calls")))]
+
+names(final_table_4)[names(final_table_4) == 1] <- "CMP"
+names(final_table_4)[names(final_table_4) == 2] <- "PNC"
+names(final_table_4)[names(final_table_4) == 3] <- "PSC"
+names(final_table_4)[names(final_table_4) == 4] <- "SCB"
+names(final_table_4)[names(final_table_4) == 5] <- "RFS"
+names(final_table_4)[names(final_table_4) == 6] <- "JRG"
+names(final_table_4)[names(final_table_4) == 7] <- "NRG"
+names(final_table_4)[names(final_table_4) == 8] <- "NIS"
+names(final_table_4)[names(final_table_4) == 9] <- "DKH"
+names(final_table_4)[names(final_table_4) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Latest Call Status per Broad Region**
+
+```{r}
+
+reactable(
+  final_table_4,
+  columns = list(
+    'Broad Region' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = nrow(final_table_4),
+  pagination = FALSE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_cs_ncr <- df_clean %>%
+  filter(final == 1, region == 13)
+
+table_cs_ncr <- table_cs_ncr %>%
+  mutate(barangay = case_when(
+		`barangay` == 26154 ~ "Addition Hills, Mandaluyong",
+		`barangay` == 26156 ~ "Barangka Drive, Mandaluyong",
+		`barangay` == 26166 ~ "Highway Hills, Mandaluyong",
+		`barangay` == 26167 ~ "Hulo, Mandaluyong",
+		`barangay` == 26170 ~ "Mauway, Mandaluyong",
+		`barangay` == 26175 ~ "Plainview, Mandaluyong",
+		`barangay` == 26281 ~ "Barangay 684, Manila",
+		`barangay` == 26341 ~ "Barangay 867, Manila",
+		`barangay` == 26348 ~ "Barangay 650, Manila",
+		`barangay` == 26358 ~ "Barangay 385, Manila",
+		`barangay` == 26510 ~ "Barangay 537, Manila",
+		`barangay` == 26547 ~ "Barangay 574, Manila",
+		`barangay` == 26670 ~ "Barangay 777, Manila",
+		`barangay` == 26906 ~ "Barangay 180, Manila",
+		`barangay` == 27091 ~ "Santo Niño, Marikina",
+		`barangay` == 27094 ~ "Alabang, Muntinlupa",
+		`barangay` == 27106 ~ "Don Galo, Paranaque",
+		`barangay` == 27112 ~ "San Dionisio, Paranaque",
+		`barangay` == 27116 ~ "Sun Valley, Paranaque",
+		`barangay` == 27130 ~ "Maybunga, Pasig",
+		`barangay` == 27167 ~ "Marulas, Valenzuela",
+		`barangay` == 27168 ~ "Maysan, Valenzuela",
+		`barangay` == 27255 ~ "Barangay 165, Caloocan",
+		`barangay` == 27267 ~ "Barangay 176, Caloocan",
+		`barangay` == 27273 ~ "Barangay 181, Caloocan",
+		`barangay` == 27371 ~ "Baritan, Malabon",
+		`barangay` == 27379 ~ "Longos, Malabon",
+		`barangay` == 27390 ~ "Tugatog, Malabon",
+		`barangay` == 27398 ~ "NBBS Kaunlaran, Navotas",
+		`barangay` == 27450 ~ "Barangay 136, Pasay",
+		`barangay` == 27511 ~ "Barangay 191, Pasay",
+		`barangay` == 27610 ~ "Aguho, Pateros",
+		`barangay` == 27624 ~ "Baesa, Quezon City",
+		`barangay` == 27663 ~ "Gulod, Quezon City",
+		`barangay` == 27690 ~ "Nagkaisang Nayon, Quezon City",
+		`barangay` == 27700 ~ "Paltok, Quezon City",
+		`barangay` == 27732 ~ "Santa Monica, Quezon City",
+		`barangay` == 27734 ~ "Santo Cristo, Quezon City",
+		`barangay` == 27736 ~ "Santo Nino, Quezon City",
+		`barangay` == 27747 ~ "Tandang Sora, Quezon City",
+		`barangay` == 26124 ~ "Cembo, Taguig",
+		`barangay` == 26139 ~ "Pitogo, Taguig",
+		`barangay` == 27800 ~ "Pinagsama, Taguig",
+		`barangay` == 27807 ~ "Upper Bicutan, Taguig",
+		`barangay` == 27810 ~ "Western Bicutan, Taguig"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Addition Hills, Mandaluyong", "Barangka Drive, Mandaluyong", "Highway Hills, Mandaluyong", "Hulo, Mandaluyong", "Mauway, Mandaluyong", "Plainview, Mandaluyong", "Barangay 684, Manila", "Barangay 867, Manila", "Barangay 650, Manila", "Barangay 385, Manila", "Barangay 537, Manila", "Barangay 574, Manila", "Barangay 777, Manila", "Barangay 180, Manila", "Santo Niño, Marikina", "Alabang, Muntinlupa", "Don Galo, Paranaque", "San Dionisio, Paranaque", "Sun Valley, Paranaque", "Maybunga, Pasig", "Marulas, Valenzuela", "Maysan, Valenzuela", "Barangay 165, Caloocan", "Barangay 176, Caloocan", "Barangay 181, Caloocan", "Baritan, Malabon", "Longos, Malabon", "Tugatog, Malabon", "NBBS Kaunlaran, Navotas", "Barangay 136, Pasay", "Barangay 191, Pasay", "Aguho, Pateros", "Baesa, Quezon City", "Gulod, Quezon City", "Nagkaisang Nayon, Quezon City", "Paltok, Quezon City", "Santa Monica, Quezon City", "Santo Cristo, Quezon City", "Santo Nino, Quezon City", "Tandang Sora, Quezon City", "Cembo, Taguig", "Pitogo, Taguig", "Pinagsama, Taguig", "Upper Bicutan, Taguig", "Western Bicutan, Taguig"
+))
+  ) %>%
+  count(`barangay`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_cs_ncr <- table_cs_ncr[, c(names(table_cs_ncr)[1], as.character(sort(as.numeric(names(table_cs_ncr)[-1]))))]
+
+# Step 2: Add row totals
+table_cs_ncr <- table_cs_ncr %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_cs_ncr %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_cs_ncr <- bind_rows(table_cs_ncr, col_totals)
+
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == "barangay"] <- "NCR Barangay"
+
+final_table_cs_ncr <- final_table_cs_ncr[, c(names(final_table_cs_ncr)[1], "Total Calls", setdiff(names(final_table_cs_ncr), c(names(final_table_cs_ncr)[1], "Total Calls")))]
+
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 1] <- "CMP"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 2] <- "PNC"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 3] <- "PSC"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 4] <- "SCB"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 5] <- "RFS"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 6] <- "JRG"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 7] <- "NRG"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 8] <- "NIS"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 9] <- "DKH"
+names(final_table_cs_ncr)[names(final_table_cs_ncr) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **NCR Latest Call Status**
+
+```{r}
+
+reactable(
+  final_table_cs_ncr,
+  columns = list(
+    'NCR Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_cs_ncl <- df_clean %>%
+  filter(final == 1, region %in% c(14, 1, 2, 3))
+
+table_cs_ncl <- table_cs_ncl %>%
+  mutate(barangay = case_when(
+		`barangay` == 4366 ~ "Bakakeng Central, Baguio, Benguet",
+		`barangay` == 4400 ~ "Gibraltar, Baguio, Benguet",
+		`barangay` == 4502 ~ "Amlimay, Buguias, Benguet",
+		`barangay` == 14516 ~ "Butac, Aguinaldo, Ifugao",
+		`barangay` == 14539 ~ "Namillangan, Alfonso Lista, Ifugao",
+		`barangay` == 14546 ~ "San Marcos, Alfonso Lista, Ifugao",
+		`barangay` == 19054 ~ "Bulanao, Tabuk, Kalinga",
+		`barangay` == 19065 ~ "Dilag, Tabuk, Kalinga",
+		`barangay` == 14762 ~ "Saud, Badoc, Ilocos Norte",
+		`barangay` == 15315 ~ "Lubing, Burgos, Ilocos Sur",
+		`barangay` == 15493 ~ "Napo, Magsingal, Ilocos Sur",
+		`barangay` == 32309 ~ "Ninoy, Aguilar, Pangasinan",
+		`barangay` == 32354 ~ "Toritori, Anda, Pangasinan",
+		`barangay` == 32913 ~ "Bolaoit, Malasiqui, Pangasinan",
+		`barangay` == 32989 ~ "Pugaro, Manaoag, Pangasinan",
+		`barangay` == 33407 ~ "Lagasit, San Quintin, Pangasinan",
+		`barangay` == 33603 ~ "Sinabaan, Umingan, Pangasinan",
+		`barangay` == 33644 ~ "Zone III, Villasis, Pangasinan",
+		`barangay` == 7695 ~ "Linao East, Tuguegarao, Cagayan",
+		`barangay` == 18221 ~ "Plaridel, Santiago, Isabela",
+		`barangay` == 18492 ~ "Dicamay I, Jones, Isabela",
+		`barangay` == 18624 ~ "Santos, Quezon, Isabela",
+		`barangay` == 18758 ~ "Villa Rose, San Guillermo, Isabela",
+		`barangay` == 30458 ~ "Napo, Ambaguio, Nueva Vizcaya",
+		`barangay` == 30670 ~ "Dagupan, Quezon, Nueva Vizcaya",
+		`barangay` == 34988 ~ "Santo Nino, Maddela, Quirino",
+		`barangay` == 2749 ~ "Decoliat, Maria Aurora, Aurora",
+		`barangay` == 3055 ~ "Colo, Dinalupihan, Bataan",
+		`barangay` == 3103 ~ "Culis, Hermosa, Bataan",
+		`barangay` == 3135 ~ "Batangas II, Mariveles, Bataan",
+		`barangay` == 6367 ~ "Tarcan, Baliuag, Bulacan",
+		`barangay` == 6518 ~ "Longos, Malolos, Bulacan",
+		`barangay` == 6620 ~ "Cacarong Matanda, Pandi, Bulacan",
+		`barangay` == 6663 ~ "San Jose, Plaridel, Bulacan",
+		`barangay` == 6736 ~ "Francisco Homes-Mulawin, SJDM, Bulacan",
+		`barangay` == 6776 ~ "Santo Cristo, SJDM, Bulacan",
+		`barangay` == 6817 ~ "Salangan, San Miguel, Bulacan",
+		`barangay` == 6868 ~ "Bulac, Santa Maria, Bulacan",
+		`barangay` == 29650 ~ "Tugatug, Bongabon, Nueva Ecija",
+		`barangay` == 29699 ~ "Macatbong, Cabanatuan, Nueva Ecija",
+		`barangay` == 29755 ~ "San Fernando Sur, Cabiao, Nueva Ecija",
+		`barangay` == 31751 ~ "Cuayan, Angeles, Pampanga",
+		`barangay` == 31775 ~ "Sapangbato, Angeles, Pampanga",
+		`barangay` == 31787 ~ "Sucad, Apalit, Pampanga",
+		`barangay` == 31857 ~ "Paligui, Candaba, Pampanga",
+		`barangay` == 32010 ~ "Caduang Tete, Macabebe, Pampanga",
+		`barangay` == 32257 ~ "San Basilio, Santa Rita, Pampanga",
+		`barangay` == 39241 ~ "Anupul, Bamban, Tarlac",
+		`barangay` == 39418 ~ "Santa Lucia, Gerona, Tarlac",
+		`barangay` == 39519 ~ "Cayanga, Paniqui, Tarlac",
+		`barangay` == 39985 ~ "San Juan, Cabangan, Zambales"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Bakakeng Central, Baguio, Benguet", "Gibraltar, Baguio, Benguet", "Amlimay, Buguias, Benguet", "Butac, Aguinaldo, Ifugao", "Namillangan, Alfonso Lista, Ifugao", "San Marcos, Alfonso Lista, Ifugao", "Bulanao, Tabuk, Kalinga", "Dilag, Tabuk, Kalinga", "Saud, Badoc, Ilocos Norte", "Lubing, Burgos, Ilocos Sur", "Napo, Magsingal, Ilocos Sur", "Ninoy, Aguilar, Pangasinan", "Toritori, Anda, Pangasinan", "Bolaoit, Malasiqui, Pangasinan", "Pugaro, Manaoag, Pangasinan", "Lagasit, San Quintin, Pangasinan", "Sinabaan, Umingan, Pangasinan", "Zone III, Villasis, Pangasinan", "Linao East, Tuguegarao, Cagayan", "Plaridel, Santiago, Isabela", "Dicamay I, Jones, Isabela", "Santos, Quezon, Isabela", "Villa Rose, San Guillermo, Isabela", "Napo, Ambaguio, Nueva Vizcaya", "Dagupan, Quezon, Nueva Vizcaya", "Santo Nino, Maddela, Quirino", "Decoliat, Maria Aurora, Aurora", "Colo, Dinalupihan, Bataan", "Culis, Hermosa, Bataan", "Batangas II, Mariveles, Bataan", "Tarcan, Baliuag, Bulacan", "Longos, Malolos, Bulacan", "Cacarong Matanda, Pandi, Bulacan", "San Jose, Plaridel, Bulacan", "Francisco Homes-Mulawin, SJDM, Bulacan", "Santo Cristo, SJDM, Bulacan", "Salangan, San Miguel, Bulacan", "Bulac, Santa Maria, Bulacan", "Tugatug, Bongabon, Nueva Ecija", "Macatbong, Cabanatuan, Nueva Ecija", "San Fernando Sur, Cabiao, Nueva Ecija", "Cuayan, Angeles, Pampanga", "Sapangbato, Angeles, Pampanga", "Sucad, Apalit, Pampanga", "Paligui, Candaba, Pampanga", "Caduang Tete, Macabebe, Pampanga", "San Basilio, Santa Rita, Pampanga", "Anupul, Bamban, Tarlac", "Santa Lucia, Gerona, Tarlac", "Cayanga, Paniqui, Tarlac", "San Juan, Cabangan, Zambales"
+))
+  ) %>%
+  count(`barangay`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_cs_ncl <- table_cs_ncl[, c(names(table_cs_ncl)[1], as.character(sort(as.numeric(names(table_cs_ncl)[-1]))))]
+
+# Step 2: Add row totals
+table_cs_ncl <- table_cs_ncl %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_cs_ncl %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_cs_ncl <- bind_rows(table_cs_ncl, col_totals)
+
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == "barangay"] <- "NCL Barangay"
+
+final_table_cs_ncl <- final_table_cs_ncl[, c(names(final_table_cs_ncl)[1], "Total Calls", setdiff(names(final_table_cs_ncl), c(names(final_table_cs_ncl)[1], "Total Calls")))]
+
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 1] <- "CMP"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 2] <- "PNC"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 3] <- "PSC"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 4] <- "SCB"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 5] <- "RFS"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 6] <- "JRG"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 7] <- "NRG"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 8] <- "NIS"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 9] <- "DKH"
+names(final_table_cs_ncl)[names(final_table_cs_ncl) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **NCL Latest Call Status**
+
+```{r}
+
+reactable(
+  final_table_cs_ncl,
+  columns = list(
+    'NCL Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_cs_slb <- df_clean %>%
+  filter(final == 1, region %in% c(4, 17, 5))
+
+table_cs_slb <- table_cs_slb %>%
+  mutate(barangay = case_when(
+		`barangay` == 3408 ~ "Cuta, Batangas, Batangas",
+		`barangay` == 4045 ~ "Tugtug, San Jose, Batangas",
+		`barangay` == 4064 ~ "Libato, San Juan, Batangas",
+		`barangay` == 4179 ~ "Balisong, Taal, Batangas",
+		`barangay` == 9970 ~ "Habay I, Bacoor, Cavite",
+		`barangay` == 10010 ~ "Salinas I, Bacoor, Cavite",
+		`barangay` == 10040 ~ "Cabilang Baybay, Carmona, Cavite",
+		`barangay` == 10138 ~ "Fatima III, Dasmarinas, Cavite",
+		`barangay` == 10141 ~ "Langkaan II, Dasmarinas, Cavite",
+		`barangay` == 10148 ~ "Saint Peter I, Dasmarines, Cavite",
+		`barangay` == 10162 ~ "San Agustin III, Dasmarinas, Cavite",
+		`barangay` == 10293 ~ "Anabu II-D, Imus, Cavite",
+		`barangay` == 10594 ~ "Ipil II, Silang, Cavite",
+		`barangay` == 10672 ~ "Bagtas, Tanza, Cavite",
+		`barangay` == 10716 ~ "Aguado, Martires, Cavite",
+		`barangay` == 10724 ~ "Lapidario, Martires, Cavite",
+		`barangay` == 19769 ~ "La Mesa, Calamba, Laguna",
+		`barangay` == 19853 ~ "San Jose, Binan, Laguna",
+		`barangay` == 19984 ~ "San Miguel, Mabitac, Laguna",
+		`barangay` == 20083 ~ "Poblacion I, Nagcarlan, Laguna",
+		`barangay` == 20134 ~ "Kabulusan, Pakil, Laguna",
+		`barangay` == 20163 ~ "Santa Clara Sur, Pila, Laguna",
+		`barangay` == 20270 ~ "Pacita 1, San Pedro, Laguna",
+		`barangay` == 33739 ~ "Maligaya, Buenavista, Quezon",
+		`barangay` == 34344 ~ "Cotta, Lucena, Quezon",
+		`barangay` == 34539 ~ "Pinagtubigan Weste, Perez, Quezon",
+		`barangay` == 35071 ~ "Pila Pila, Binangonan, Rizal",
+		`barangay` == 35079 ~ "Tatala, Binangonan, Rizal",
+		`barangay` == 35081 ~ "San Andres, Cainta, Rizal",
+		`barangay` == 35109 ~ "Cupang, Antipolo, Rizal",
+		`barangay` == 35117 ~ "San Jose, Antipolo, Rizal",
+		`barangay` == 35121 ~ "Santa Cruz, Antipolo, Rizal",
+		`barangay` == 30777 ~ "Balansay, Mamburao, Occidental Mindoro",
+		`barangay` == 30942 ~ "Labonan, Bongabong, Oriental Mindoro",
+		`barangay` == 31003 ~ "Lumang Bayan, Calapan, Oriental Mindoro",
+		`barangay` == 31213 ~ "Aninuan, Puerto Galera, Oriental Mindoro",
+		`barangay` == 31386 ~ "Rio Tuba, Bataraza, Palawan",
+		`barangay` == 31574 ~ "Bacungan, Puerto Princesa, Palawan",
+		`barangay` == 31638 ~ "Tiniguiban, Puerto Princesa, Palawan",
+		`barangay` == 35295 ~ "Limon Sur, Looc, Romblon",
+		`barangay` == 35367 ~ "Binongahan, San Agustin, Romblon",
+		`barangay` == 35420 ~ "Poblacion, Santa Fe, Romblon",
+		`barangay` == 1515 ~ "Bgy. 41 - Bogtong, Legazpi, Albay",
+		`barangay` == 1710 ~ "Tobgon, Oas, Albay",
+		`barangay` == 7821 ~ "Bautista, Labo, Camarines Norte",
+		`barangay` == 8359 ~ "Balaynan, Goa, Camarines Sur",
+		`barangay` == 8740 ~ "San Gabriel, Pamplona, Camarines Sur",
+		`barangay` == 8881 ~ "Maragni, San Fernando, Camarines Sur",
+		`barangay` == 8968 ~ "Butawanan, Siruma, Camarines Sur",
+		`barangay` == 8996 ~ "Huyonhuyon, Tigaon, Camarines Sur",
+		`barangay` == 9847 ~ "Calatagan Proper, Virac, Catanduanes",
+		`barangay` == 24797 ~ "Nipa, Palanas, Masbates",
+		`barangay` == 36801 ~ "Dangcalan, Castilla, Sorsogon"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Cuta, Batangas, Batangas", "Tugtug, San Jose, Batangas", "Libato, San Juan, Batangas", "Balisong, Taal, Batangas", "Habay I, Bacoor, Cavite", "Salinas I, Bacoor, Cavite", "Cabilang Baybay, Carmona, Cavite", "Fatima III, Dasmarinas, Cavite", "Langkaan II, Dasmarinas, Cavite", "Saint Peter I, Dasmarines, Cavite", "San Agustin III, Dasmarinas, Cavite", "Anabu II-D, Imus, Cavite", "Ipil II, Silang, Cavite", "Bagtas, Tanza, Cavite", "Aguado, Martires, Cavite", "Lapidario, Martires, Cavite", "La Mesa, Calamba, Laguna", "San Jose, Binan, Laguna", "San Miguel, Mabitac, Laguna", "Poblacion I, Nagcarlan, Laguna", "Kabulusan, Pakil, Laguna", "Santa Clara Sur, Pila, Laguna", "Pacita 1, San Pedro, Laguna", "Maligaya, Buenavista, Quezon", "Cotta, Lucena, Quezon", "Pinagtubigan Weste, Perez, Quezon", "Pila Pila, Binangonan, Rizal", "Tatala, Binangonan, Rizal", "San Andres, Cainta, Rizal", "Cupang, Antipolo, Rizal", "San Jose, Antipolo, Rizal", "Santa Cruz, Antipolo, Rizal", "Balansay, Mamburao, Occidental Mindoro", "Labonan, Bongabong, Oriental Mindoro", "Lumang Bayan, Calapan, Oriental Mindoro", "Aninuan, Puerto Galera, Oriental Mindoro", "Rio Tuba, Bataraza, Palawan", "Bacungan, Puerto Princesa, Palawan", "Tiniguiban, Puerto Princesa, Palawan", "Limon Sur, Looc, Romblon", "Binongahan, San Agustin, Romblon", "Poblacion, Santa Fe, Romblon", "Bgy. 41 - Bogtong, Legazpi, Albay", "Tobgon, Oas, Albay", "Bautista, Labo, Camarines Norte", "Balaynan, Goa, Camarines Sur", "San Gabriel, Pamplona, Camarines Sur", "Maragni, San Fernando, Camarines Sur", "Butawanan, Siruma, Camarines Sur", "Huyonhuyon, Tigaon, Camarines Sur", "Calatagan Proper, Virac, Catanduanes", "Nipa, Palanas, Masbates", "Dangcalan, Castilla, Sorsogon"
+))
+  ) %>%
+  count(`barangay`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_cs_slb <- table_cs_slb[, c(names(table_cs_slb)[1], as.character(sort(as.numeric(names(table_cs_slb)[-1]))))]
+
+# Step 2: Add row totals
+table_cs_slb <- table_cs_slb %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_cs_slb %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_cs_slb <- bind_rows(table_cs_slb, col_totals)
+
+names(final_table_cs_slb)[names(final_table_cs_slb) == "barangay"] <- "SLB Barangay"
+
+final_table_cs_slb <- final_table_cs_slb[, c(names(final_table_cs_slb)[1], "Total Calls", setdiff(names(final_table_cs_slb), c(names(final_table_cs_slb)[1], "Total Calls")))]
+
+names(final_table_cs_slb)[names(final_table_cs_slb) == 1] <- "CMP"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 2] <- "PNC"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 3] <- "PSC"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 4] <- "SCB"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 5] <- "RFS"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 6] <- "JRG"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 7] <- "NRG"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 8] <- "NIS"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 9] <- "DKH"
+names(final_table_cs_slb)[names(final_table_cs_slb) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **SLB Latest Call Status**
+
+```{r}
+
+reactable(
+  final_table_cs_slb,
+  columns = list(
+    'SLB Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_cs_vis <- df_clean %>%
+  filter(final == 1, region %in% c(6, 7, 8, 18))
+
+table_cs_vis <- table_cs_vis %>%
+  mutate(barangay = case_when(
+		`barangay` == 1158 ~ "Mabilo, New Washington, Aklan",
+		`barangay` == 2094 ~ "Caromangay, Hamtic, Antique",
+		`barangay` == 9173 ~ "Agbatuan, Dumarao, Capiz",
+		`barangay` == 14464 ~ "Santa Teresa, Jordan, Guimaras",
+		`barangay` == 16450 ~ "Agtabo, Passi, Iloilo",
+		`barangay` == 16641 ~ "Sapao, Dumangas, Iloilo",
+		`barangay` == 16766 ~ "Bito-on, Iloilo, Iloilo",
+		`barangay` == 17060 ~ "Tampucao, Lambunao, Iloilo",
+		`barangay` == 17179 ~ "Omambong, Leon, Iloilo",
+		`barangay` == 17683 ~ "Bagacay, San Rafael, Iloilo",
+		`barangay` == 27884 ~ "Jorge L. Araneta, Bago, Negros Occidental",
+		`barangay` == 27994 ~ "Linaon, Cauayan, Negros Occidental",
+		`barangay` == 28077 ~ "Tampalon, Kabankalan, Negros Occidental",
+		`barangay` == 28206 ~ "Tabu, Ilog, Negros Occidental",
+		`barangay` == 28331 ~ "Recreo, Pontevedra, Negros Occidental",
+		`barangay` == 28442 ~ "Mambaroto, Sipalay, Negros Occidental",
+		`barangay` == 28543 ~ "La Paz, Bais, Negros Oriental",
+		`barangay` == 28635 ~ "Balogo, Guihulngan, Negros Oriental",
+		`barangay` == 4768 ~ "Poblacion, Alicia, Bohol",
+		`barangay` == 5451 ~ "Catagbacan Handig, Loon, Bohol",
+		`barangay` == 10763 ~ "Poblacion, Aloguinsan, Cebu",
+		`barangay` == 11048 ~ "Buhisan, Cebu, Cebu",
+		`barangay` == 11049 ~ "Bulacao, Cebu, Cebu",
+		`barangay` == 11068 ~ "Kalunasan, Cebu, Cebu",
+		`barangay` == 11114 ~ "Tisa, Cebu, Cebu",
+		`barangay` == 11214 ~ "Nangka, Consolacion, Cebu",
+		`barangay` == 11382 ~ "Palanas, Ginatilan, Cebu",
+		`barangay` == 11400 ~ "Mactan, Lapu-Lapu, Cebu",
+		`barangay` == 11471 ~ "Jagobiao, Mandaue, Cebu",
+		`barangay` == 11640 ~ "Poblacion, Samboan, Cebu",
+		`barangay` == 11725 ~ "Poblacion, Santander, Cebu",
+		`barangay` == 11854 ~ "Media Once, Toledo, Cebu",
+		`barangay` == 11869 ~ "Antipolo, Tuburan, Cebu",
+		`barangay` == 13866 ~ "Poblacion V, Balangkayan, Eastern Samar",
+		`barangay` == 14348 ~ "Campidhan, San Julian, Eastern Samar",
+		`barangay` == 14404 ~ "Nato, Taft, Eastern Samar",
+		`barangay` == 22136 ~ "Langit, Alangalang, Leyte",
+		`barangay` == 22245 ~ "Bago, Bato, Leyte",
+		`barangay` == 22333 ~ "Sambel, Burauen, Leyte",
+		`barangay` == 23449 ~ "Barangay 110, Tacloban, Leyte",
+		`barangay` == 29092 ~ "Baybay, Catarman, Northern Samar",
+		`barangay` == 37537 ~ "Mayuga, Libagon, Southern Leyte",
+		`barangay` == 37761 ~ "Lipanto, Saint Bernard, Southern Leyte"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Mabilo, New Washington, Aklan", "Caromangay, Hamtic, Antique", "Agbatuan, Dumarao, Capiz", "Santa Teresa, Jordan, Guimaras", "Agtabo, Passi, Iloilo", "Sapao, Dumangas, Iloilo", "Bito-on, Iloilo, Iloilo", "Tampucao, Lambunao, Iloilo", "Omambong, Leon, Iloilo", "Bagacay, San Rafael, Iloilo", "Jorge L. Araneta, Bago, Negros Occidental", "Linaon, Cauayan, Negros Occidental", "Tampalon, Kabankalan, Negros Occidental", "Tabu, Ilog, Negros Occidental", "Recreo, Pontevedra, Negros Occidental", "Mambaroto, Sipalay, Negros Occidental", "La Paz, Bais, Negros Oriental", "Balogo, Guihulngan, Negros Oriental", "Poblacion, Alicia, Bohol", "Catagbacan Handig, Loon, Bohol", "Poblacion, Aloguinsan, Cebu", "Buhisan, Cebu, Cebu", "Bulacao, Cebu, Cebu", "Kalunasan, Cebu, Cebu", "Tisa, Cebu, Cebu", "Nangka, Consolacion, Cebu", "Palanas, Ginatilan, Cebu", "Mactan, Lapu-Lapu, Cebu", "Jagobiao, Mandaue, Cebu", "Poblacion, Samboan, Cebu", "Poblacion, Santander, Cebu", "Media Once, Toledo, Cebu", "Antipolo, Tuburan, Cebu", "Poblacion V, Balangkayan, Eastern Samar", "Campidhan, San Julian, Eastern Samar", "Nato, Taft, Eastern Samar", "Langit, Alangalang, Leyte", "Bago, Bato, Leyte", "Sambel, Burauen, Leyte", "Barangay 110, Tacloban, Leyte", "Baybay, Catarman, Northern Samar", "Mayuga, Libagon, Southern Leyte", "Lipanto, Saint Bernard, Southern Leyte"
+))
+  ) %>%
+  count(`barangay`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_cs_vis <- table_cs_vis[, c(names(table_cs_vis)[1], as.character(sort(as.numeric(names(table_cs_vis)[-1]))))]
+
+# Step 2: Add row totals
+table_cs_vis <- table_cs_vis %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_cs_vis %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_cs_vis <- bind_rows(table_cs_vis, col_totals)
+
+names(final_table_cs_vis)[names(final_table_cs_vis) == "barangay"] <- "Visayas Barangay"
+
+final_table_cs_vis <- final_table_cs_vis[, c(names(final_table_cs_vis)[1], "Total Calls", setdiff(names(final_table_cs_vis), c(names(final_table_cs_vis)[1], "Total Calls")))]
+
+names(final_table_cs_vis)[names(final_table_cs_vis) == 1] <- "CMP"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 2] <- "PNC"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 3] <- "PSC"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 4] <- "SCB"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 5] <- "RFS"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 6] <- "JRG"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 7] <- "NRG"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 8] <- "NIS"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 9] <- "DKH"
+names(final_table_cs_vis)[names(final_table_cs_vis) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Visayas Latest Call Status**
+
+```{r}
+
+reactable(
+  final_table_cs_vis,
+  columns = list(
+    'Visayas Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
+
+```{r, include = FALSE}
+table_cs_min <- df_clean %>%
+  filter(final == 1, region %in% c(9, 10, 11, 12, 16, 19))
+
+table_cs_min <- table_cs_min %>%
+  mutate(barangay = case_when(
+		`barangay` == 40254 ~ "Potungan, Dapitan, Zamboanga Del Norte",
+		`barangay` == 40281 ~ "Olingan, Dipolog, Zamboanga Del Norte",
+		`barangay` == 40568 ~ "Dohinob, Pres Manuel A. Roxas, Zamboanga Del Norte",
+		`barangay` == 40715 ~ "Lunday, Sibuco, Zamboanga Del Norte",
+		`barangay` == 40951 ~ "Binuay, Dimataling, Zamboanga Del Sur",
+		`barangay` == 41577 ~ "Capisan, Zamboanga, Zamboanga Del Sur",
+		`barangay` == 41587 ~ "Kasanyangan, Zamboanga, Zamboanga Del Sur",
+		`barangay` == 42024 ~ "Libertad, Tungawan, Zamboanga Sibugay",
+		`barangay` == 5892 ~ "Barangay 11, Malaybalay, Bukidnon",
+		`barangay` == 6169 ~ "Damilag, Manolo Fortich, Bukidnon",
+		`barangay` == 6215 ~ "Langcataon, Pangantucan, Bukidnon",
+		`barangay` == 20446 ~ "Buru-un, Iligan, Lanao Del Norte",
+		`barangay` == 25394 ~ "Mantic, Tangub, Misamis Occidental",
+		`barangay` == 25481 ~ "Cogon, Balingasag, Misamis Oriental",
+		`barangay` == 25568 ~ "Carmen, Cagayan De Oro, Misamis Oriental",
+		`barangay` == 25704 ~ "San Juan, Gingoog, Misamis Oriental",
+		`barangay` == 25731 ~ "Kamelon, Initao, Misamis Oriental",
+		`barangay` == 25919 ~ "Casinglot, Tagoloan, Misamis Oriental",
+		`barangay` == 12579 ~ "Banbanon, Laak, Davao De Oro",
+		`barangay` == 12669 ~ "Magcagong, Maragusan, Davao De Oro",
+		`barangay` == 12715 ~ "Union, Monkayo, Davao De Oro",
+		`barangay` == 12825 ~ "La Paz, Carmen, Davao Del Norte",
+		`barangay` == 12886 ~ "Madaum, Tagum, Davao Del Norte",
+		`barangay` == 12893 ~ "Mankilam, Tagum, Davao Del Norte",
+		`barangay` == 13082 ~ "Barangay 31-D, Davao, Davao Del Sur",
+		`barangay` == 13109 ~ "Cabantian, Davao, Davao Del Sur",
+		`barangay` == 13149 ~ "Lizada, Davao, Davao Del Sur",
+		`barangay` == 13609 ~ "Badas, Mati, Davao Oriental",
+		`barangay` == 12055 ~ "Busaon, Banisilan, Cotabato",
+		`barangay` == 36431 ~ "Lebe, Kiamba, Sarangani",
+		`barangay` == 37217 ~ "Apopong, Gen. Santos, South Cotabato",
+		`barangay` == 37236 ~ "San Isidro, Gen. Santos, South Cotabato",
+		`barangay` %in% c(37318, 37318) ~ "Poblacion, Polomolok, South Cotabato",
+		`barangay` == 37268 ~ "Zone IV, Koronadal, South Cotabato",
+		`barangay` == 37288 ~ "Upper Maculan, Lake Sebu, South Cotabato",
+		`barangay` == 37304 ~ "Cannery Site, Polomolok, South Cotabato",
+		`barangay` == 37367 ~ "Bukay Pait, Tantangan, South Cotabato",
+		`barangay` == 692 ~ "La Caridad, Prosperidad, Agusan Del Sur",
+		`barangay` == 738 ~ "Bayugan 2, San Francisco, Agusan Del Sur",
+		`barangay` == 807 ~ "New Tubigon, Sibagat, Agusan Del Sur",
+		`barangay` == 13749 ~ "Laguna, Cagdianao, Dinagat Islands",
+		`barangay` == 13772 ~ "Albor, Libjo, Dinagat Islands",
+		`barangay` == 38877 ~ "San Juan, Surigao, Surigao Del Norte",
+		`barangay` == 39036 ~ "Telaje, Tandag, Surigao Del Sur",
+		`barangay` == 39149 ~ "Kauswagan, San Agustin, Surigao Del Sur",
+		`barangay` == 21197 ~ "Pagalongan Masioon, Ditsaan-Ramain, Lanao Del Sur",
+		`barangay` == 21426 ~ "Balagunun, Maguing, Lanao Del Sur",
+		`barangay` == 21951 ~ "Gapao Balindong, Taraka, Lanao Del Sur",
+		`barangay` == 23804 ~ "Tamontaka, Datu Odin Sinsuat, Maguindanao",
+		`barangay` == 23805 ~ "Tanuel, Datu Odin Sinsuat, Maguindanao",
+		`barangay` == 24003 ~ "Lepak, Pandag, Maguindanao",
+		`barangay` == 24074 ~ "Bongo, South Upi, Maguindanao",
+		`barangay` == 38418 ~ "Anuling, Patikul, Sulu",
+		`barangay` == 38425 ~ "Gandasuli, Patikul, Sulu",
+		`barangay` == 39878 ~ "Panglima Alari, Sitangkai, Tawi-Tawi"
+    ),
+    `barangay` = factor(`barangay`, levels = c("Potungan, Dapitan, Zamboanga Del Norte", "Olingan, Dipolog, Zamboanga Del Norte", "Dohinob, Pres Manuel A. Roxas, Zamboanga Del Norte", "Lunday, Sibuco, Zamboanga Del Norte", "Binuay, Dimataling, Zamboanga Del Sur", "Capisan, Zamboanga, Zamboanga Del Sur", "Kasanyangan, Zamboanga, Zamboanga Del Sur", "Libertad, Tungawan, Zamboanga Sibugay", "Barangay 11, Malaybalay, Bukidnon", "Damilag, Manolo Fortich, Bukidnon", "Langcataon, Pangantucan, Bukidnon", "Buru-un, Iligan, Lanao Del Norte", "Mantic, Tangub, Misamis Occidental", "Cogon, Balingasag, Misamis Oriental", "Carmen, Cagayan De Oro, Misamis Oriental", "San Juan, Gingoog, Misamis Oriental", "Kamelon, Initao, Misamis Oriental", "Casinglot, Tagoloan, Misamis Oriental", "Banbanon, Laak, Davao De Oro", "Magcagong, Maragusan, Davao De Oro", "Union, Monkayo, Davao De Oro", "La Paz, Carmen, Davao Del Norte", "Madaum, Tagum, Davao Del Norte", "Mankilam, Tagum, Davao Del Norte", "Barangay 31-D, Davao, Davao Del Sur", "Cabantian, Davao, Davao Del Sur", "Lizada, Davao, Davao Del Sur", "Badas, Mati, Davao Oriental", "Busaon, Banisilan, Cotabato", "Lebe, Kiamba, Sarangani", "Apopong, Gen. Santos, South Cotabato", "San Isidro, Gen. Santos, South Cotabato", "Poblacion, Polomolok, South Cotabato", "Zone IV, Koronadal, South Cotabato", "Upper Maculan, Lake Sebu, South Cotabato", "Cannery Site, Polomolok, South Cotabato", "Bukay Pait, Tantangan, South Cotabato", "La Caridad, Prosperidad, Agusan Del Sur", "Bayugan 2, San Francisco, Agusan Del Sur", "New Tubigon, Sibagat, Agusan Del Sur", "Laguna, Cagdianao, Dinagat Islands", "Albor, Libjo, Dinagat Islands", "San Juan, Surigao, Surigao Del Norte", "Telaje, Tandag, Surigao Del Sur", "Kauswagan, San Agustin, Surigao Del Sur", "Pagalongan Masioon, Ditsaan-Ramain, Lanao Del Sur", "Balagunun, Maguing, Lanao Del Sur", "Gapao Balindong, Taraka, Lanao Del Sur", "Tamontaka, Datu Odin Sinsuat, Maguindanao", "Tanuel, Datu Odin Sinsuat, Maguindanao", "Lepak, Pandag, Maguindanao", "Bongo, South Upi, Maguindanao", "Anuling, Patikul, Sulu", "Gandasuli, Patikul, Sulu", "Panglima Alari, Sitangkai, Tawi-Tawi"
+))
+  ) %>%
+  count(`barangay`, `call_status`) %>%
+  pivot_wider(
+    names_from = `call_status`,
+    values_from = n,
+    values_fill = 0
+  )
+
+table_cs_min <- table_cs_min[, c(names(table_cs_min)[1], as.character(sort(as.numeric(names(table_cs_min)[-1]))))]
+
+# Step 2: Add row totals
+table_cs_min <- table_cs_min %>%
+  mutate(`Total Calls` = rowSums(across(where(is.numeric))))
+
+# Step 3: Add column totals
+col_totals <- table_cs_min %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  mutate(barangay = "Total Calls")
+
+# Step 4: Bind totals row
+final_table_cs_min <- bind_rows(table_cs_min, col_totals)
+
+names(final_table_cs_min)[names(final_table_cs_min) == "barangay"] <- "Mindanao Barangay"
+
+final_table_cs_min <- final_table_cs_min[, c(names(final_table_cs_min)[1], "Total Calls", setdiff(names(final_table_cs_min), c(names(final_table_cs_min)[1], "Total Calls")))]
+
+names(final_table_cs_min)[names(final_table_cs_min) == 1] <- "CMP"
+names(final_table_cs_min)[names(final_table_cs_min) == 2] <- "PNC"
+names(final_table_cs_min)[names(final_table_cs_min) == 3] <- "PSC"
+names(final_table_cs_min)[names(final_table_cs_min) == 4] <- "SCB"
+names(final_table_cs_min)[names(final_table_cs_min) == 5] <- "RFS"
+names(final_table_cs_min)[names(final_table_cs_min) == 6] <- "JRG"
+names(final_table_cs_min)[names(final_table_cs_min) == 7] <- "NRG"
+names(final_table_cs_min)[names(final_table_cs_min) == 8] <- "NIS"
+names(final_table_cs_min)[names(final_table_cs_min) == 9] <- "DKH"
+names(final_table_cs_min)[names(final_table_cs_min) == 10] <- "RCC"
+
+```
+
+::: {.row}
+::: {.column width="85%" .mx-auto}
+::: {.card}
+## **Mindanao Latest Call Status**
+
+```{r}
+
+reactable(
+  final_table_cs_min,
+  columns = list(
+    'Mindanao Barangay' = colDef(
+      sticky = "left",
+      minWidth = 300,
+      maxWidth = 300,
+      resizable = TRUE,
+      align = "left",
+      style = list(fontWeight = "bold")
+      ),
+    'Total Calls' = colDef(
+      sticky = "left",
+      minWidth = 150,
+      maxWidth = 150,
+      resizable = TRUE,
+      style = list(fontWeight = "bold")
+      )
+    ),
+  striped = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  outlined = TRUE,
+  compact = TRUE,
+  wrap = FALSE,
+  defaultColDef = colDef(
+    align = "center",
+    minWidth = 100,   # minimum width
+    maxWidth = 500,  # maximum width
+    resizable = TRUE # allow user to drag/resize
+    ),
+  defaultPageSize = 15,
+  pagination = TRUE
+)
+```
+:::
+:::
+:::
