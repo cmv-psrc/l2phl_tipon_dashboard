@@ -1,5 +1,6 @@
 project:
   type: website
+  output-dir: .
 
 website:
   title: "L2PHL CATI Project"
