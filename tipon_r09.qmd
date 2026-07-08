@@ -23,12 +23,21 @@ library(reshape2)
 library(shiny)
 
 #Load EXCEL FILE (change file_path per user)
-file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
+current_user <- Sys.info()[["user"]]
+
+if (current_user == "Charles Valencia") {
+  file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
+  df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
+} else if (current_user == "Jem") {
+  
+} else {
+  stop("Unknown user")
+}
+
 
 # read specific sheets
 df_clean <- read.xlsx(file_path, sheet = "CleanData")
 df_callcount <- read.xlsx(file_path, sheet = "CallCounts")
-df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
 
 ```
 
