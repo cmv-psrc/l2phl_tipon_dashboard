@@ -28,8 +28,9 @@ current_user <- Sys.info()[["user"]]
 if (current_user == "Charles Valencia") {
   file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R08.xlsx"
   df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
-} else if (current_user == "Jem") {
-  
+} else if (current_user == "Joy Yangyang") {
+  file_path <- "C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R08.xlsx"
+  df_areas <- read.xlsx("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas") 
 } else {
   stop("Unknown user")
 }
