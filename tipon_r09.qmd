@@ -25,10 +25,14 @@ library(shiny)
 #Load EXCEL FILE (change file_path per user)
 current_user <- Sys.info()[["user"]]
 
+#remove source() once round fieldwork is finished
+
 if (current_user == "Charles Valencia") {
+  source("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R09 - Data Refresh.R", echo=FALSE)
   file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
   df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
 } else if (current_user == "Joy Yangyang") {
+  source("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R09 - Data Refresh.R", echo=FALSE)
   file_path <- "C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
   df_areas <- read.xlsx("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas") 
 } else {
