@@ -1,5 +1,5 @@
 ---
-title: "Round 09"
+title: "Round 10"
 subtitle: |
   <span style="font-size:0.85em; color:#666; font-style:italic;">
   Last updated: `r format(Sys.time(), '%B %d, %Y %I:%M %p')`
@@ -28,10 +28,12 @@ current_user <- Sys.info()[["user"]]
 #remove source() once round fieldwork is finished
 
 if (current_user == "Charles Valencia") {
-  file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
+  source("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R10 - Data Refresh.R", echo=FALSE)
+  file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R10.xlsx"
   df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
 } else if (current_user == "Joy Yangyang") {
-  file_path <- "C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R09.xlsx"
+  source("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R10 - Data Refresh.R", echo=FALSE)
+  file_path <- "C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R10.xlsx"
   df_areas <- read.xlsx("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas") 
 } else {
   stop("Unknown user")
@@ -671,7 +673,7 @@ final_table_3 <- final_table_3[, c(names(final_table_3)[1], "Total Interviews", 
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **Completed Interviews per Broad Region and Day** <i>(July)</i>
+## **Completed Interviews per Broad Region and Day** <i>(August)</i>
 
 ```{r}
 
@@ -800,7 +802,7 @@ final_table_ncr <- final_table_ncr[, c(names(final_table_ncr)[1], "Total Intervi
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **NCR Completed Interviews per Day** <i>(July)</i>
+## **NCR Completed Interviews per Day** <i>(August)</i>
 
 ```{r}
 
@@ -936,7 +938,7 @@ final_table_ncl <- final_table_ncl[, c(names(final_table_ncl)[1], "Total Intervi
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **NCL Completed Interviews per Day** <i>(July)</i>
+## **NCL Completed Interviews per Day** <i>(August)</i>
 
 ```{r}
 
@@ -1074,7 +1076,7 @@ final_table_slb <- final_table_slb[, c(names(final_table_slb)[1], "Total Intervi
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **SLB Completed Interviews per Day** <i>(July)</i>
+## **SLB Completed Interviews per Day** <i>(August)</i>
 
 ```{r}
 
@@ -1202,7 +1204,7 @@ final_table_vis <- final_table_vis[, c(names(final_table_vis)[1], "Total Intervi
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **Visayas Completed Interviews per Day** <i>(July)</i>
+## **Visayas Completed Interviews per Day** <i>(August)</i>
 
 ```{r}
 
@@ -1342,7 +1344,7 @@ final_table_min <- final_table_min[, c(names(final_table_min)[1], "Total Intervi
 ::: {.row}
 ::: {.column width="85%" .mx-auto}
 ::: {.card}
-## **Mindanao Completed Interviews per Day** <i>(July)</i>
+## **Mindanao Completed Interviews per Day** <i>(August)</i>
 
 ```{r}
 
