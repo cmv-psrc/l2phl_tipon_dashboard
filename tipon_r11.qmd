@@ -31,10 +31,10 @@ if (current_user == "Charles Valencia") {
   source("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R11 - Data Refresh.R", echo=FALSE)
   file_path <- "C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R11.xlsx"
   df_areas <- read.xlsx("C:/Users/Charles Valencia/OneDrive - PSRC/Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas")
-} else if (current_user == "Joy Yangyang") {
-  source("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R11 - Data Refresh.R", echo=FALSE)
-  file_path <- "C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R11.xlsx"
-  df_areas <- read.xlsx("C:/Users/Joy Yangyang/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas") 
+} else if (current_user == "Jem") {
+  source("C:/Users/Jem/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data Refresh/Tipon R11 - Data Refresh.R", echo=FALSE)
+  file_path <- "C:/Users/Jem/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon R11.xlsx"
+  df_areas <- read.xlsx("C:/Users/Jem/OneDrive - PSRC/3-Data Science/Dashboard (Power BI)/Tipon Daily Dashboard (ongoing)/Data/Tipon Areas.xlsx", sheet = "Areas") 
 } else {
   stop("Unknown user")
 }
