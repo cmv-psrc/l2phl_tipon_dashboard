@@ -9,5 +9,3 @@ git add .
 git commit -m "Site update %DATE% %TIME%"
 
 git push origin main
-
-pause
